@@ -47,6 +47,7 @@ Vagrant.configure("2") do |cfg|
       
       config.vm.provider :virtualbox do |v, override|
         v.name = rootdc_name
+        v.linked_clone = true
         v.gui = false
         v.cpus = 2
         v.memory = 2048
@@ -99,6 +100,7 @@ Vagrant.configure("2") do |cfg|
       
       config.vm.provider :virtualbox do |v, override|
         v.name = ADCS_name
+        v.linked_clone = true  # <--- THIS SAVES 30GB+ across the lab
         v.gui = false
         v.cpus = 1
         v.memory = 1024
@@ -148,9 +150,10 @@ Vagrant.configure("2") do |cfg|
       
       config.vm.provider :virtualbox do |v, override|
         v.name = SCCM_name
+        v.linked_clone = true
         v.gui = false
         v.cpus = 2
-        v.memory = 6144 
+        v.memory = 8192 
         v.customize ["modifyvm", :id, "--vram", 64]
       end
       
@@ -231,14 +234,11 @@ Vagrant.configure("2") do |cfg|
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/SCCM/Vuln-NAA-PXE.ps1"
       config.vm.provision "shell", reboot: true
 
-
-
       # ========================================================================
       # PHASE 7: VULNERABLE CONFIGURATION (CRED-2 ATTACK PATH)
       # ========================================================================      
       # - Deploys task sequence to All Systems collection
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/SCCM/Vuln-TS-Variables.ps1"
-
       config.vm.provision "shell", reboot: true
 
       # ========================================================================
@@ -270,77 +270,74 @@ Vagrant.configure("2") do |cfg|
 
 
 
-#     # This is a child domain controller with standard configuration. 
-#     # It creates another  child domain and populates the domain with AD objects like users and groups. 
-#     # It can also create specific GPOs and serve as DNS server.
-#     cfg.vm.define "ChildDC" do |config|
-#       config.vm.box = "StefanScherer/windows_2019"
-#       config.vm.box_version = "2018.10.03"
-#       config.vm.hostname = dc_name 
+  #   # This is a child domain controller with standard configuration. 
+  #   # It creates another  child domain and populates the domain with AD objects like users and groups. 
+  #   # It can also create specific GPOs and serve as DNS server.
+  #   cfg.vm.define "ChildDC" do |config|
+  #     config.vm.box = "StefanScherer/windows_2019"
+  #     config.vm.box_version = "2018.10.03"
+  #     config.vm.hostname = dc_name 
 
-#       # Use the plaintext WinRM transport and force it to use basic authentication.
-#       # NB this is needed because the default negotiate transport stops working
-#       #    after the domain controller is installed.
-#       #    see https://groups.google.com/forum/#!topic/vagrant-up/sZantuCM0q4
-#       config.winrm.transport = :plaintext 
-#       config.winrm.basic_auth_only = true
-#       config.winrm.retry_limit = 30
-#       config.winrm.retry_delay = 10
+  #     # Use the plaintext WinRM transport and force it to use basic authentication.
+  #     # NB this is needed because the default negotiate transport stops working
+  #     #    after the domain controller is installed.
+  #     #    see https://groups.google.com/forum/#!topic/vagrant-up/sZantuCM0q4
+  #     config.winrm.transport = :plaintext 
+  #     config.winrm.basic_auth_only = true
+  #     config.winrm.retry_limit = 30
+  #     config.winrm.retry_delay = 10
 
-#       config.vm.provider :virtualbox do |v, override|
-#           v.name = dc_name
-#           v.gui = false
-#           v.cpus = 4
-#           v.memory = 4096
-#           v.customize ["modifyvm", :id, "--vram", 64]
-#       end
+  #     config.vm.provider :virtualbox do |v, override|
+  #         v.name = dc_name
+  #         v.linked_clone = true  # <--- THIS SAVES 30GB+ across the lab
+  #         v.gui = false
+  #         v.cpus = 4
+  #         v.memory = 4096
+  #         v.customize ["modifyvm", :id, "--vram", 64]
+  #     end
 
-#       config.vm.network :private_network,
-#           :ip => dc_ip
+  #     config.vm.network :private_network,
+  #         :ip => dc_ip
       
-#       # #https://github.com/rgl/vagrant-windows-sysprep  ## Without it ALL MACHINES gonna have same SID -__-
-#       config.vm.provision "windows-sysprep"
-#       config.vm.provision "shell", reboot: true
+  #     # #https://github.com/rgl/vagrant-windows-sysprep  ## Without it ALL MACHINES gonna have same SID -__-
+  #     config.vm.provision "windows-sysprep"
+  #     config.vm.provision "shell", reboot: true
           
-#       # Configure keyboard/language/timezone/Firewall etc.
-#       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/provision-base.ps1"
+  #     # Configure keyboard/language/timezone/Firewall etc.
+  #     config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/provision-base.ps1"
 
-#       # Disable License service to prevent machines from automatic shutdown.
-#       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/disable-license-service.ps1"
-#       config.vm.provision "shell", reboot: true
+  #     # Disable License service to prevent machines from automatic shutdown.
+  #     config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/disable-license-service.ps1"
+  #     config.vm.provision "shell", reboot: true
       
 
-#       # Create child domain
-#       # begin
-#         config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/install-domain.ps1 domain-variables.json forest-variables.json"
-#       # rescue
-#       #   # Exit if user chooses not to continue
-#       #   exit 1 unless prompt_on_error(e.message)
-#       # end
-#       config.vm.provision "shell", reboot: true
+  #     # Create child domain
+  #     # begin
+  #       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/install-domain.ps1 domain-variables.json forest-variables.json"
+  #     # rescue
+  #     #   # Exit if user chooses not to continue
+  #     #   exit 1 unless prompt_on_error(e.message)
+  #     # end
+  #     config.vm.provision "shell", reboot: true
 
-#       # Configure DNS
-#       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/network-setup.ps1 network-setup-dc.ps1 dns_entries.csv"
-#       config.vm.provision "shell", reboot: true
+  #     # Configure DNS
+  #     config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/network-setup.ps1 network-setup-dc.ps1 dns_entries.csv"
+  #     config.vm.provision "shell", reboot: true
       
 
 
-#       # Add OUs, users, groups, etc. See the script to generate new users
-#       # begin
-#         config.vm.provision "shell", path: "sharedscripts/vulns/vuln-ad.ps1", args: [ad_fqdn, 100] #, run: "always"
+  #     # Add OUs, users, groups, etc. See the script to generate new users
+  #     # begin
+  #     config.vm.provision "shell", path: "sharedscripts/vulns/vuln-ad.ps1", args: [ad_fqdn, 100] #, run: "always"
 
-#       # rescue => e
-#       #   # Exit if user chooses not to continue
-#       #   exit 1 unless prompt_on_error(e.message)
-#       # end
-#       config.vm.provision "shell", reboot: true
-#       # config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/network-setup.ps1 network-setup-dc.ps1 dns_entries.csv"
-#       # config.vm.provision "shell", reboot: true
-
-
-      
-
-#   end  
+  #     # rescue => e
+  #     #   # Exit if user chooses not to continue
+  #     #   exit 1 unless prompt_on_error(e.message)
+  #     # end
+  #     config.vm.provision "shell", reboot: true
+  #     # config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/network-setup.ps1 network-setup-dc.ps1 dns_entries.csv"
+  #     # config.vm.provision "shell", reboot: true      
+  # end  
 
 
   

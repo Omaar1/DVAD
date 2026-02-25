@@ -140,7 +140,7 @@ Stop-PhaseTimer -Status Success
 Start-PhaseTimer -PhaseName "DOWNLOADING PREREQUISITES"
 
 if (-not (Test-Path $SharePrereqs)) { New-Item -Path $SharePrereqs -ItemType Directory -Force | Out-Null }
-$PrereqCount = (Get-ChildItem -Path $SharePrereqs -File).Count
+$PrereqCount = @(Get-ChildItem -Path $SharePrereqs -File).Count
 
 if ($PrereqCount -lt 50) {
     # Find setupdl.exe
