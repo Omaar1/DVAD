@@ -163,7 +163,7 @@ Vagrant.configure("2") do |cfg|
       # ========================================================================
       # PHASE 1: INITIAL SYSTEM SETUP
       # ========================================================================
-      
+     
       # Sysprep: Generate unique SID (required for domain join, prevents SID conflicts)
       config.vm.provision "windows-sysprep"
       config.vm.provision "shell", reboot: true
