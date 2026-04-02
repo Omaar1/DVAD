@@ -144,11 +144,7 @@ Provisioning takes **30–60+ minutes** depending on disk I/O and internet speed
 
 > **Tip:** To avoid a large download during provisioning, manually place `MEM_Configmgr_Eval.exe` (~1.2 GB) in `sharedscripts/services/SCCM/MECM_Setup/` before running `vagrant up`.
 
-### Default Credentials
 
-| Account | Password |
-| --- | --- |
-| `SILENT\Administrator` | `P@ssw0rd` |
 
 > ⚠️ **This lab is intentionally vulnerable. Never expose it to untrusted networks.**
 
@@ -189,7 +185,7 @@ SilentRUN-Lab/
 | --- | --- | --- |
 | **Phase 1** | Core AD and ADCS automation | ✅ Completed |
 | **Phase 2** | MECM and SQL integration | ✅ Completed |
-| **Phase 3** | SCCM vulnerability injection (PXE / NAA / Client Push) | 🔄 In Progress |
+| **Phase 3** | SCCM vulnerability injection (PXE / NAA / Client Push) | ✅ Completed |
 | **Phase 4** | Basic AD attack paths (ACL misconfigs, delegation abuse) | 🔄 In Progress |
 | **Phase 5** | Storage optimization and final code release | 🔜 Upcoming |
 | **Phase 6** | Extended AD attacks with domain trust focus | 🔜 Upcoming |
@@ -201,10 +197,8 @@ SilentRUN-Lab/
 - **Complete Phase 3 SCCM injection** — Finalize and validate all four attack paths (CRED-1, CRED-2, client push, DP looting) end-to-end against the current build.
 - **Domain trust attack scenarios (Phase 6)** — Extend the forest to include a child domain or external trust for SID history injection, cross-domain TGT forgery, and trust ticket abuse exercises.
 - **Modular deployment** — Allow users to provision individual components (AD only, AD + ADCS, full stack) rather than always spinning up the entire environment, reducing resource requirements for targeted testing.
-- **Workstation node** — Add a domain-joined Windows workstation (`wks01`) to support lateral movement, phishing simulation, and client-side attack scenarios.
-- **Automated attack scripts** — Develop Python/Impacket-based scripts to demonstrate each vulnerability programmatically with expected tool output.
-- **Step-by-step attack walkthroughs** — Write attacker-perspective guides for each attack path covering tooling, commands, and expected results.
-- **Snapshot baseline** — Document `vagrant snapshot` workflows so users can restore a clean lab state between exercises without full reprovisioning.
+- **Workstation node** — Add a domain-joined Windows workstation (`wks01`) to support lateral movement, tools installation and privelege escalation.
+- **Step-by-step attack walkthroughs** — Write attacker-perspective guides for each attack path covering tooling, commands, and expected results. 
 - **Optional detection layer** — Integrate a lightweight Sysmon + log forwarding stack to support blue team and detection engineering use alongside the red team content.
 
 ---
@@ -216,13 +210,6 @@ SilentRUN-Lab/
 **Provisioning stability** — Sequential multi-server deployment can span 60+ minutes. Parallel provisioning introduces I/O bottlenecks and intermittent WinRM drops during domain joins, particularly affecting SCCM and SQL initialization timing.
 
 **Lab inflexibility** — The current monolithic design requires provisioning the full stack even when only a base AD environment is needed. Modular deployment is planned as a Phase 5 improvement.
-
----
-
-## 👤 Author
-
-**Omar Abdel-Elah** — Self-led research and engineering.  
-Open to collaboration for testing custom attack paths or integrating new vulnerability modules.
 
 ---
 
