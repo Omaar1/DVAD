@@ -1,100 +1,235 @@
-<p align="center">
-    <img src="https://github.com/MWR-CyberSec/tabletop-lab-creation/blob/main/tabletop_network_layout.png" width="500px">
-</p>
+![Platform](https://img.shields.io/badge/Platform-VirtualBox-blue?style=for-the-badge&logo=virtualbox)
+![Provisioner](https://img.shields.io/badge/Provisioner-Vagrant-1868F2?style=for-the-badge&logo=vagrant)
+![OS](https://img.shields.io/badge/OS-Windows_Server_2019-0078D4?style=for-the-badge&logo=windows)
+![Language](https://img.shields.io/badge/Automation-PowerShell-5391FE?style=for-the-badge&logo=powershell)
+![Focus](https://img.shields.io/badge/Focus-AD_/_ADCS_/_SCCM-red?style=for-the-badge)
 
-> **Tabletop Lab Creation** is a toolset for building a network of Active Directory hosts using Vagrant. These hosts can then be integrated into your SIEM and EDR solution and used to simulate attacks for tabletop exercises. The hosts themselves can also be used for PoC testing of tools.
+# 🔬 AutoAD Attack Range
 
-### Table of contents 
+> **A zero-touch Infrastructure-as-Code pipeline that deploys a realistic, deliberately vulnerable enterprise Active Directory environment — ready for red team exercises in under an hour.**
 
-- [Installation](#installation)
-    - [Prerequisites](#prerequisites)
-- [Usage: How to provision the network](#usage-how-to-provision-the-network)
-    - [Base Configuration](#base-configuration)
-    - [Network Configuration](#network-configuration)
-    - [AD Forest Configuration](#ad-forest-configuration)
-    - [Windows Configuration](#windows-configuration)
-- [Usage: AWS Provisioning](#usage-aws-provisioning)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
+Manually building multi-server Windows lab environments for security research takes days and is error-prone. AutoAD Attack Range eliminates that overhead. A single `vagrant up` provisions a fully functional AD forest with a Certificate Authority, SQL Server, and MECM/SCCM — all pre-configured with intentional security misconfigurations that mirror real-world enterprise flaws.
 
+---
 
+## 🏗️ Lab Architecture
 
-## Installation
+```
+                    ┌─────────────────────────────┐
+                    │      silent.run (Forest)     │
+                    │           ROOTDC             │
+                    │        10.10.10.100          │
+                    └──────────┬───────────────────┘
+                               │
+         ┌─────────────────────┼──────────────────────┐
+         │                     │                      │
+┌────────┴────────┐  ┌─────────┴───────┐  ┌──────────┴──────────┐
+│   ADCS          │  │   SCCM / MECM   │  │   SQL Server        │
+│   Certificate   │  │   Config Mgr    │  │   (co-hosted on     │
+│   Authority     │  │   10.10.10.104  │  │    SCCM node)       │
+│   10.10.10.103  │  └─────────────────┘  └─────────────────────┘
+└─────────────────┘
+```
 
-Download the latest release of the scripts for use. Vagrant is used as provisioner and should be installed from [here](https://www.vagrantup.com/downloads)
+| Machine | IP Address | Role |
+| --- | --- | --- |
+| **RootDC** | `10.10.10.100` | Forest Root DC / Primary DNS |
+| **ADCS** | `10.10.10.103` | Enterprise Root Certificate Authority |
+| **SCCM** | `10.10.10.104` | Microsoft Endpoint Configuration Manager + SQL |
 
+---
+
+## 🎯 Why This Exists
+
+Setting up AD, ADCS, SQL, and MECM concurrently is resource-intensive and brittle. Security teams end up spending days on infrastructure instead of practicing attack paths. AutoAD Attack Range solves this with:
+
+- **Zero-touch provisioning** — Vagrant and PowerShell handle everything from forest creation to SCCM vulnerability injection
+- **Offline payload handling** — DISM-based .NET/ADK installation and pre-staged MECM installers keep provisioning reliable on slow or air-gapped networks
+- **Linked Clone optimization** — minimizes disk footprint across multiple heavy Windows VMs
+- **Repeatable and disposable** — spin up, test, destroy, repeat
+
+---
+
+## 🖥️ Lab Components
+
+### 1. RootDC — Forest Root Domain Controller
+
+Provisions the `silent.run` AD forest, creates the root domain, and populates Active Directory with OUs, tiered security groups, and user accounts. Serves as the primary DNS server for the entire lab network.
+
+- **Domain:** `silent.run`
+- **Resources:** 2 vCPUs, 2 GB RAM
+
+#### 🎯 Attack Paths
+
+- **Kerberoasting** — Offline cracking of service account TGS hashes
+- **AS-REP Roasting** — Targeting accounts with pre-authentication disabled
+- **DCSync** — Credential extraction via Directory Replication Services
+- **Golden Ticket** — TGT forgery using the KRBTGT hash
+- **Silver Ticket** — Service-specific TGS forgery
+- **ACL Abuse** — Misconfigured object permissions enabling privilege escalation
+- **Delegation Abuse** — Unconstrained and constrained Kerberos delegation exploitation
+- **GPO Abuse** — Privilege escalation via misconfigured Group Policy Objects
+- **AdminSDHolder Abuse** — Persistence via protected group ACL manipulation
+
+---
+
+### 2. ADCS — Active Directory Certificate Services
+
+Enterprise Root CA joined to `silent.run`. Deployed with vulnerable certificate templates covering the most impactful ESC escalation paths used in modern engagements.
+
+- **CA Type:** Enterprise Root CA
+- **Resources:** 1 vCPU, 1 GB RAM
+
+#### 🎯 Attack Paths
+
+- **ESC1** — Low-privileged enrollment for auth certificates with arbitrary Subject Alternative Names
+- **ESC2** — Any Purpose EKU or unrestricted EKU on enrollable templates
+- **ESC3** — Certificate Request Agent template abuse for enrollment on behalf of others
+- **ESC4** — Weak ACLs on certificate templates allowing modification
+- **ESC8** — NTLM relay to AD CS HTTP enrollment endpoints
+- **Certifried (CVE-2022-26923)** — Machine account certificate spoofing for domain privilege escalation
+
+---
+
+### 3. SCCM — Microsoft Endpoint Configuration Manager
+
+The primary attack target of this lab. MECM is deployed with unattended SQL provisioning and pre-injected misconfigurations that replicate the most commonly abused SCCM attack surface in enterprise environments.
+
+- **Resources:** 2 vCPUs, 6 GB RAM
+- **SQL Server:** Auto-provisioned during deployment
+
+#### 🎯 Attack Paths
+
+- **CRED-1 — PXE Boot (No Password)**
+  PXE boot is enabled without password protection. Attackers can boot from the network and retrieve the Network Access Account credential (`SILENT\sccm_naa`) directly from the policy.
+
+- **CRED-2 — Exposed Task Sequence**
+  A task sequence deployed to the "All Systems" collection contains exposed variables or embedded credentials readable by low-privileged clients.
+
+- **Client Push Installation Abuse**
+  Client push is enabled using `SILENT\sccm_cpia`. Controlling a target machine during push enables credential capture via relay or LSASS dumping.
+
+- **Anonymous Distribution Point Looting**
+  A distribution point is configured with anonymous access or exposes sensitive package content retrievable without authentication.
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
-The scripts allow for provisioning through either VirtualBox locally or AWS for cloud-based deployment. If you want to perform a local deployment, make sure to install VirtualBox. You will also require the following Vagrant plugins:
+| Requirement | Notes |
+| --- | --- |
+| [Vagrant](https://www.vagrantup.com/downloads) ≥ 2.3.x | `winget install --id HashiCorp.Vagrant` |
+| [VirtualBox](https://www.virtualbox.org/wiki/Downloads) ≥ 7.x | Primary hypervisor |
+| RAM | 16 GB minimum — 32 GB recommended |
+| Disk | 100 GB free SSD space recommended |
 
-* [Vagrant-WinRM](https://github.com/criteo/vagrant-winrm)
-* [Vagrant-AWS](https://github.com/mitchellh/vagrant-aws)
+### Vagrant Plugins
 
-## Usage: How to provision the network
+```powershell
+vagrant plugin install vagrant-winrm
+vagrant plugin install vagrant-windows-sysprep
+```
 
-You can provision the entire network using `vagrant up`. This will create the following four machines:
+### Deploy
 
-* ROOTDC - Root domain controller with the domain of *example.loc*
-* CHILDDC - Child domain controller with the domain of *za.example.loc*
-* SRV1 - A domain-joined Windows 2019 server machine
-* WRK1 - A domain-joined Windows workstation
+```powershell
+git clone https://github.com/Omaar1/SilentRUN-Lab.git
+cd SilentRUN-Lab
+vagrant up
+```
 
-Make sure to disable the NAT adapater on the ROOTDC once it is provisioned to allow for the provisioning of the other hosts. The provisioning scripts can be found in the *sharedscripts* directory. All variables can be found in the *provision* directory.
+Provisioning takes **30–60+ minutes** depending on disk I/O and internet speed.
 
-### Base Configuration
+> **Tip:** To avoid a large download during provisioning, manually place `MEM_Configmgr_Eval.exe` (~1.2 GB) in `sharedscripts/services/SCCM/MECM_Setup/` before running `vagrant up`.
 
-The `provision-base.ps1` provisioning script is used for performing the basic provisioning steps such as:
+### Default Credentials
 
-* Setting the language, timezone, and keyboard layout
-* Loading a Microsoft evaluation license
-* Disabling the rotation of the machine account's password for the AD configuration
+| Account | Password |
+| --- | --- |
+| `SILENT\Administrator` | `P@ssw0rd` |
 
-### Network Configuration
+> ⚠️ **This lab is intentionally vulnerable. Never expose it to untrusted networks.**
 
-The `network-setup.ps1` provisioning script is responsible for performing the network setup. On domain controllers, it will create a scheduled task that will recreate the DNS entries specified in the variable CSV files. On normal machines, it will point the DNS of the ethernet adapter to the DC for DNS resolution.
+---
 
-### AD Forest Configuration
+## 📁 Project Structure
 
-The `install-forest.ps1` and `install-domain.ps1` provisioning scripts will create the AD forest. The variables for the forest can be found in the `forest-variables.json` and `domain-variables.json` files respectively.
+```
+SilentRUN-Lab/
+├── Vagrantfile                            # Lab orchestration and VM definitions
+├── SilentRUN_Lab_Guide.md                 # Detailed lab notes and attack context
+├── provision/
+│   └── variables/                         # JSON/CSV config for AD objects and DNS
+└── sharedscripts/
+    ├── ps.ps1                             # PowerShell execution wrapper
+    ├── ad/
+    │   ├── install-forest.ps1             # Forest and root domain setup
+    │   ├── join-domain.ps1                # Domain join automation
+    │   └── create-ad-objects.ps1          # OU, user, and group creation
+    ├── networking/
+    │   ├── network-setup.ps1              # Network config dispatcher
+    │   └── network-setup-rootdc.ps1       # Root DC DNS configuration
+    ├── windows/
+    │   └── provision-base.ps1             # Base OS configuration
+    └── services/
+        ├── ADCS/
+        │   ├── install-adcs.ps1           # CA install and vulnerable template deployment
+        │   └── ESC[1-4]_VulnerableTemplate.json
+        └── SCCM/
+            └── MECM_Setup/               # MECM installer drop location
+```
 
-The `create-ad-objects.ps1` provisioning script will create AD objects such as OUs, groups, and users in the domain. Since the domain structure is tiered, it will create Tier 0, Tier 1, and Tier 2 groups. Additional AD objects can be specified in the `planned-users.json` file for creation.
+---
 
-The `join-domain.ps1` provisioning script is used to join new hosts to the domain. These hosts will be joined and added to the OU specified in the VagrantFile.
+## 🗺️ Project Phases
 
-### Windows Configuration
+| Phase | Scope | Status |
+| --- | --- | --- |
+| **Phase 1** | Core AD and ADCS automation | ✅ Completed |
+| **Phase 2** | MECM and SQL integration | ✅ Completed |
+| **Phase 3** | SCCM vulnerability injection (PXE / NAA / Client Push) | 🔄 In Progress |
+| **Phase 4** | Basic AD attack paths (ACL misconfigs, delegation abuse) | 🔄 In Progress |
+| **Phase 5** | Storage optimization and final code release | 🔜 Upcoming |
+| **Phase 6** | Extended AD attacks with domain trust focus | 🔜 Upcoming |
 
-[Chocolatey](https://chocolatey.org/) is used as provisioner on the Windows hosts. It is automatically installed on workstations and servers through the `install-choco.ps1` provisioning script. Afterwards, it is used to install Chrome on the workstation. It can be used to install other tools as well.
+---
 
-## Usage: AWS Provisioning
+## 🔭 Future Work
 
-The `VagrantFile_aws_example` provides an example of using AWS for the provisioning of the hosts. You will have to add the following details for provisioning:
+- **Complete Phase 3 SCCM injection** — Finalize and validate all four attack paths (CRED-1, CRED-2, client push, DP looting) end-to-end against the current build.
+- **Domain trust attack scenarios (Phase 6)** — Extend the forest to include a child domain or external trust for SID history injection, cross-domain TGT forgery, and trust ticket abuse exercises.
+- **Modular deployment** — Allow users to provision individual components (AD only, AD + ADCS, full stack) rather than always spinning up the entire environment, reducing resource requirements for targeted testing.
+- **Workstation node** — Add a domain-joined Windows workstation (`wks01`) to support lateral movement, phishing simulation, and client-side attack scenarios.
+- **Automated attack scripts** — Develop Python/Impacket-based scripts to demonstrate each vulnerability programmatically with expected tool output.
+- **Step-by-step attack walkthroughs** — Write attacker-perspective guides for each attack path covering tooling, commands, and expected results.
+- **Snapshot baseline** — Document `vagrant snapshot` workflows so users can restore a clean lab state between exercises without full reprovisioning.
+- **Optional detection layer** — Integrate a lightweight Sysmon + log forwarding stack to support blue team and detection engineering use alongside the red team content.
 
-* AWS Access Key ID
-* AWS Secret Access Key
-* AWS Session Token
-* AWS Keypair Name
-* AWS Security Group 
+---
 
-Once the details are provided, `vagrant up` can be used to provision the ROOTDC on AWS. Using this as an example, the other three hosts can also be provisioned in AWS.
+## ⚠️ Known Challenges
 
-## Troubleshooting
+**Resource consumption** — MECM and multiple Windows Servers are inherently heavy. Linked Clones and tuned VM resource allocations keep the footprint manageable, but 16 GB RAM and SSD storage are hard minimums for stable operation.
 
-*For assistance on any issues in scripts, please log an issue.*
+**Provisioning stability** — Sequential multi-server deployment can span 60+ minutes. Parallel provisioning introduces I/O bottlenecks and intermittent WinRM drops during domain joins, particularly affecting SCCM and SQL initialization timing.
 
-## Contributing
+**Lab inflexibility** — The current monolithic design requires provisioning the full stack even when only a base AD environment is needed. Modular deployment is planned as a Phase 5 improvement.
 
-See [`CONTRIBUTING.MD`](CONTRIBUTING.MD) for more information.
+---
 
-## License 
+## 👤 Author
 
-MIT License
+**Omar Abdel-Elah** — Self-led research and engineering.  
+Open to collaboration for testing custom attack paths or integrating new vulnerability modules.
 
-Copyright (c) 2022 MWR CyberSec
+---
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+## 📝 License
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+This project is intended for **educational and research purposes only**. Use responsibly and only in isolated lab environments.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+---
+
+*Happy Hacking! 🏴‍☠️*
