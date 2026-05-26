@@ -23,8 +23,9 @@ if (-not (Test-Path ".\Vagrantfile")) {
     Write-Host ""
     Write-Host "[0] Vagrantfile not found — cloning repo..." -ForegroundColor Yellow
 
-    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
-    $gitPath = if ($gitCmd) { $gitCmd.Source }
+    $gitCmd  = Get-Command git -ErrorAction SilentlyContinue
+    $gitPath = $null
+    if ($gitCmd) { $gitPath = $gitCmd.Source }
     if (-not $gitPath) {
         Write-Host "[!] Git not found. Install it first:" -ForegroundColor Red
         Write-Host "      winget install --id Git.Git -e --source winget" -ForegroundColor Red
@@ -61,16 +62,18 @@ if (-not (Test-Path ".\Vagrantfile")) {
 Write-Host ""
 Write-Host "[1] Checking prerequisites..." -ForegroundColor Yellow
 
-$vagrantCmd = Get-Command vagrant -ErrorAction SilentlyContinue
-$vagrantPath = if ($vagrantCmd) { $vagrantCmd.Source }
+$vagrantCmd  = Get-Command vagrant -ErrorAction SilentlyContinue
+$vagrantPath = $null
+if ($vagrantCmd) { $vagrantPath = $vagrantCmd.Source }
 if (-not $vagrantPath) {
     Write-Host "[!] Vagrant not found. Install from https://www.vagrantup.com/downloads" -ForegroundColor Red
     exit 1
 }
 Write-Host "  Vagrant : $(vagrant --version)"
 
-$vboxCmd = Get-Command VBoxManage -ErrorAction SilentlyContinue
-$vboxPath = if ($vboxCmd) { $vboxCmd.Source }
+$vboxCmd  = Get-Command VBoxManage -ErrorAction SilentlyContinue
+$vboxPath = $null
+if ($vboxCmd) { $vboxPath = $vboxCmd.Source }
 if (-not $vboxPath) {
     Write-Host "[!] VirtualBox (VBoxManage) not found. Install from https://www.virtualbox.org/" -ForegroundColor Red
     exit 1
