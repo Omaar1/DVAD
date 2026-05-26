@@ -308,7 +308,8 @@ if (Test-Path "C:\laps_setup_status.txt") {
     Write-Host "  [WARN] LAPS setup timed out - SVR1 may not have joined yet (AllExtendedRights still set)" -ForegroundColor Yellow
 }
 
-$svr1 = Get-ADComputer "SVR1" -ErrorAction SilentlyContinue
+$svr1 = $null
+try { $svr1 = Get-ADComputer "SVR1" -ErrorAction Stop } catch { }
 if ($svr1) {
     Set-ADObjectACE -TargetDN $svr1.DistinguishedName -PrincipalSAM "t.brown" -RightType "AllExtendedRights"
     Write-Host "  [OK] t.brown: AllExtendedRights on SVR1$" -ForegroundColor Green
