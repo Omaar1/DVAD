@@ -76,8 +76,9 @@ Write-Host ' Configuring DNS Server settings...'
 if (Get-WindowsFeature -Name DNS | Where-Object { $_.Installed -eq $true }) {
     # Bind DNS Server to specific IP (idempotent: skip if already set)
     $dnsParamsKey = 'HKLM:\SYSTEM\CurrentControlSet\Services\DNS\Parameters'
-    $currentListen = (Get-ItemProperty -Path $dnsParamsKey -Name 'ListenAddresses' -ErrorAction SilentlyContinue).ListenAddresses
-    if ($currentListen -and ($currentListen -is [array]) -and ($currentListen.Count -eq 1) -and ($currentListen[0] -eq $ip)) {
+    $currentListen = $null
+    try { $currentListen = Get-ItemPropertyValue -Path $dnsParamsKey -Name 'ListenAddresses' -ErrorAction Stop } catch { }
+    if ($currentListen -and (@($currentListen).Count -eq 1) -and (@($currentListen)[0] -eq $ip)) {
         Write-Host " [SKIP] DNS already bound to $ip" -ForegroundColor DarkGray
     } else {
         Set-ItemProperty -Path $dnsParamsKey -Name 'ListenAddresses' -Value ([string[]]@($ip))
