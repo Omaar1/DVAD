@@ -1,0 +1,430 @@
+{
+  "objects": [
+    {"type": "ou", "name": "HR",          "path": "OU=Employees,"},
+    {"type": "ou", "name": "Finance",     "path": "OU=Employees,"},
+    {"type": "ou", "name": "Engineering", "path": "OU=Employees,"},
+    {"type": "ou", "name": "Management",  "path": "OU=Employees,"},
+    {"type": "ou", "name": "Security",    "path": "OU=Employees,"},
+    {"type": "ou", "name": "Contractors", "path": "OU=Employees,"},
+    {"type": "ou", "name": "Service Accounts", "path": ""},
+
+    {"type": "group", "name": "IT-Team",           "path": "OU=Groups,"},
+    {"type": "group", "name": "Security-Team",     "path": "OU=Groups,"},
+    {"type": "group", "name": "HR-Team",           "path": "OU=Groups,"},
+    {"type": "group", "name": "Finance-Team",      "path": "OU=Groups,"},
+    {"type": "group", "name": "Sales-Team",        "path": "OU=Groups,"},
+    {"type": "group", "name": "Marketing-Team",    "path": "OU=Groups,"},
+    {"type": "group", "name": "Engineering-Team",  "path": "OU=Groups,"},
+    {"type": "group", "name": "Server-Admins",     "path": "OU=Groups,"},
+    {"type": "group", "name": "Helpdesk-Operators","path": "OU=Groups,"},
+    {"type": "group", "name": "DB-Admins",         "path": "OU=Groups,"},
+    {"type": "group", "name": "Backup-Operators",  "path": "OU=Groups,"},
+    {"type": "group", "name": "Project-Phoenix",   "path": "OU=Groups,"},
+    {"type": "group", "name": "Project-Titan",     "path": "OU=Groups,"},
+    {"type": "group", "name": "GMSA-Readers",      "path": "OU=Groups,"},
+    {"type": "group", "name": "LAPS-Admins",       "path": "OU=Groups,"},
+    {"type": "group", "name": "Remote-Desktop-Users","path": "OU=Groups,"},
+    {"type": "group", "name": "VPN-Users",         "path": "OU=Groups,"},
+    {"type": "group", "name": "File-Share-Access", "path": "OU=Groups,"},
+    {"type": "group", "name": "Management-Team",   "path": "OU=Groups,"},
+
+    {
+      "type": "user", "username": "c.wright",
+      "first": "Charles", "last": "Wright",
+      "path": "OU=Management,OU=Employees,",
+      "title": "Chief Executive Officer", "department": "Management",
+      "password": "Wr!ght#CEO2025Secure",
+      "groups": ["Management-Team", "Domain Admins"]
+    },
+    {
+      "type": "user", "username": "s.miller",
+      "first": "Sarah", "last": "Miller",
+      "path": "OU=Management,OU=Employees,",
+      "title": "Chief Financial Officer", "department": "Management",
+      "password": "F1nance$Mgmt#2025!",
+      "groups": ["Management-Team", "Finance-Team"]
+    },
+    {
+      "type": "user", "username": "m.thompson",
+      "first": "Michael", "last": "Thompson",
+      "path": "OU=Management,OU=Employees,",
+      "title": "Chief Technology Officer", "department": "Management",
+      "password": "T3ch#Lead2025Str0ng!",
+      "groups": ["Management-Team", "IT-Team", "Domain Admins"]
+    },
+
+    {
+      "type": "user", "username": "b.anderson",
+      "first": "Brian", "last": "Anderson",
+      "path": "OU=IT,OU=Employees,",
+      "title": "IT Manager", "department": "IT",
+      "password": "ITm@nager#Secure2025",
+      "groups": ["IT-Team", "Server-Admins", "Domain Admins"]
+    },
+    {
+      "type": "user", "username": "r.chen",
+      "first": "Rachel", "last": "Chen",
+      "path": "OU=IT,OU=Employees,",
+      "title": "Senior Systems Administrator", "department": "IT",
+      "password": "Password1",
+      "groups": ["IT-Team", "Server-Admins"]
+    },
+    {
+      "type": "user", "username": "l.garcia",
+      "first": "Luis", "last": "Garcia",
+      "path": "OU=IT,OU=Employees,",
+      "title": "Systems Administrator", "department": "IT",
+      "password": "G@rcia#SysOps2025",
+      "groups": ["IT-Team", "Server-Admins"]
+    },
+    {
+      "type": "user", "username": "a.johnson",
+      "first": "Amanda", "last": "Johnson",
+      "path": "OU=IT,OU=Employees,",
+      "title": "IT Helpdesk Specialist", "department": "IT",
+      "password": "H3lpd3sk#2025!",
+      "groups": ["IT-Team", "Helpdesk-Operators"]
+    },
+    {
+      "type": "user", "username": "t.brown",
+      "first": "Tyler", "last": "Brown",
+      "path": "OU=IT,OU=Employees,",
+      "title": "IT Helpdesk Analyst", "department": "IT",
+      "password": "Br0wn#Helpdesk25",
+      "groups": ["IT-Team", "Helpdesk-Operators"]
+    },
+    {
+      "type": "user", "username": "n.kumar",
+      "first": "Nisha", "last": "Kumar",
+      "path": "OU=IT,OU=Employees,",
+      "title": "Database Administrator", "department": "IT",
+      "password": "DBA#Nish@2025Sec!",
+      "groups": ["IT-Team", "DB-Admins"]
+    },
+    {
+      "type": "user", "username": "j.white",
+      "first": "Jason", "last": "White",
+      "path": "OU=IT,OU=Employees,",
+      "title": "Network Engineer", "department": "IT",
+      "password": "N3tw0rk#Eng2025!",
+      "groups": ["IT-Team", "VPN-Users"]
+    },
+    {
+      "type": "user", "username": "e.davis",
+      "first": "Emily", "last": "Davis",
+      "path": "OU=IT,OU=Employees,",
+      "title": "Cloud Infrastructure Engineer", "department": "IT",
+      "password": "Cl0ud#Infra2025!",
+      "groups": ["IT-Team"]
+    },
+
+    {
+      "type": "user", "username": "p.rodriguez",
+      "first": "Patricia", "last": "Rodriguez",
+      "path": "OU=Security,OU=Employees,",
+      "title": "Chief Information Security Officer", "department": "Security",
+      "password": "C1SO#SecOps2025!x",
+      "groups": ["Security-Team", "Management-Team"]
+    },
+    {
+      "type": "user", "username": "d.patel",
+      "first": "Deepak", "last": "Patel",
+      "path": "OU=Security,OU=Employees,",
+      "title": "SOC Analyst", "department": "Security",
+      "password": "S0C#An@lyst2025!",
+      "groups": ["Security-Team"]
+    },
+    {
+      "type": "user", "username": "k.nguyen",
+      "first": "Kevin", "last": "Nguyen",
+      "path": "OU=Security,OU=Employees,",
+      "title": "SOC Analyst II", "department": "Security",
+      "password": "K3v!n#SOC2025Sec",
+      "groups": ["Security-Team"]
+    },
+    {
+      "type": "user", "username": "a.foster",
+      "first": "Alex", "last": "Foster",
+      "path": "OU=Security,OU=Employees,",
+      "title": "Penetration Test Lead", "department": "Security",
+      "password": "P3nt3st#L3ad2025!",
+      "groups": ["Security-Team"]
+    },
+
+    {
+      "type": "user", "username": "h.robinson",
+      "first": "Helen", "last": "Robinson",
+      "path": "OU=HR,OU=Employees,",
+      "title": "HR Director", "department": "HR",
+      "password": "HR#D!rector2025Sec",
+      "groups": ["HR-Team", "Management-Team"]
+    },
+    {
+      "type": "user", "username": "m.wilson",
+      "first": "Maria", "last": "Wilson",
+      "path": "OU=HR,OU=Employees,",
+      "title": "HR Administrator", "department": "HR",
+      "password": "HRadm!n#2025Sec!",
+      "groups": ["HR-Team"]
+    },
+    {
+      "type": "user", "username": "c.baker",
+      "first": "Catherine", "last": "Baker",
+      "path": "OU=HR,OU=Employees,",
+      "title": "Recruiter", "department": "HR",
+      "password": "R3cru!ter#2025CB",
+      "groups": ["HR-Team"]
+    },
+    {
+      "type": "user", "username": "r.james",
+      "first": "Robert", "last": "James",
+      "path": "OU=HR,OU=Employees,",
+      "title": "Recruiter", "department": "HR",
+      "password": "Recru!t#J@mes2025",
+      "groups": ["HR-Team"]
+    },
+    {
+      "type": "user", "username": "v.scott",
+      "first": "Victoria", "last": "Scott",
+      "path": "OU=HR,OU=Employees,",
+      "title": "Payroll Specialist", "department": "HR",
+      "password": "P@yr0ll#Sc0tt2025",
+      "groups": ["HR-Team", "Finance-Team"]
+    },
+
+    {
+      "type": "user", "username": "k.lee",
+      "first": "Kenneth", "last": "Lee",
+      "path": "OU=Finance,OU=Employees,",
+      "title": "Finance Director", "department": "Finance",
+      "password": "F!nDir#K3nn3th25!",
+      "groups": ["Finance-Team", "Management-Team", "Project-Phoenix"]
+    },
+    {
+      "type": "user", "username": "l.martinez",
+      "first": "Laura", "last": "Martinez",
+      "path": "OU=Finance,OU=Employees,",
+      "title": "Senior Accountant", "department": "Finance",
+      "password": "Acc0unt#Laur@2025",
+      "groups": ["Finance-Team"]
+    },
+    {
+      "type": "user", "username": "d.harris",
+      "first": "Daniel", "last": "Harris",
+      "path": "OU=Finance,OU=Employees,",
+      "title": "Accountant", "department": "Finance",
+      "password": "H@rr!s#Fin2025Ac",
+      "groups": ["Finance-Team"]
+    },
+    {
+      "type": "user", "username": "s.clark",
+      "first": "Stephanie", "last": "Clark",
+      "path": "OU=Finance,OU=Employees,",
+      "title": "Accounts Payable Clerk", "department": "Finance",
+      "password": "AP#Cl@rk2025Fin!",
+      "groups": ["Finance-Team"]
+    },
+    {
+      "type": "user", "username": "w.taylor",
+      "first": "William", "last": "Taylor",
+      "path": "OU=Finance,OU=Employees,",
+      "title": "Financial Analyst", "department": "Finance",
+      "password": "F!nAnlys#W1ll2025",
+      "groups": ["Finance-Team"]
+    },
+
+    {
+      "type": "user", "username": "g.adams",
+      "first": "Gregory", "last": "Adams",
+      "path": "OU=Sales,OU=Employees,",
+      "title": "VP of Sales", "department": "Sales",
+      "password": "S@les#VP2025Greg!",
+      "groups": ["Sales-Team", "Management-Team"]
+    },
+    {
+      "type": "user", "username": "j.campbell",
+      "first": "Jessica", "last": "Campbell",
+      "path": "OU=Sales,OU=Employees,",
+      "title": "Senior Account Manager", "department": "Sales",
+      "password": "Acc#Mgr2025J3ss!",
+      "groups": ["Sales-Team", "Project-Titan"]
+    },
+    {
+      "type": "user", "username": "m.hall",
+      "first": "Matthew", "last": "Hall",
+      "path": "OU=Sales,OU=Employees,",
+      "title": "Account Manager", "department": "Sales",
+      "password": "S@les#H@ll2025AM",
+      "groups": ["Sales-Team"]
+    },
+    {
+      "type": "user", "username": "a.king",
+      "first": "Amber", "last": "King",
+      "path": "OU=Sales,OU=Employees,",
+      "title": "Sales Representative", "department": "Sales",
+      "password": "K!ng#Sales2025Rep",
+      "groups": ["Sales-Team"]
+    },
+    {
+      "type": "user", "username": "t.phillips",
+      "first": "Thomas", "last": "Phillips",
+      "path": "OU=Sales,OU=Employees,",
+      "title": "Business Development Rep", "department": "Sales",
+      "password": "BDR#Ph!ll2025Tom",
+      "groups": ["Sales-Team", "VPN-Users"]
+    },
+
+    {
+      "type": "user", "username": "n.evans",
+      "first": "Nicole", "last": "Evans",
+      "path": "OU=Marketing,OU=Employees,",
+      "title": "Marketing Director", "department": "Marketing",
+      "password": "Mkt#D!r3ctor2025!",
+      "groups": ["Marketing-Team", "Management-Team"]
+    },
+    {
+      "type": "user", "username": "b.turner",
+      "first": "Brandon", "last": "Turner",
+      "path": "OU=Marketing,OU=Employees,",
+      "title": "Content Marketing Manager", "department": "Marketing",
+      "password": "C0nt3nt#Mktg2025!",
+      "groups": ["Marketing-Team"]
+    },
+    {
+      "type": "user", "username": "o.mitchell",
+      "first": "Olivia", "last": "Mitchell",
+      "path": "OU=Marketing,OU=Employees,",
+      "title": "Graphic Designer", "department": "Marketing",
+      "password": "D3s!gn#Oliv2025Mk",
+      "groups": ["Marketing-Team"]
+    },
+    {
+      "type": "user", "username": "i.perez",
+      "first": "Ivan", "last": "Perez",
+      "path": "OU=Marketing,OU=Employees,",
+      "title": "Social Media Specialist", "department": "Marketing",
+      "password": "S0c!al#Iv@n2025Mk",
+      "groups": ["Marketing-Team"]
+    },
+
+    {
+      "type": "user", "username": "f.collins",
+      "first": "Frank", "last": "Collins",
+      "path": "OU=Engineering,OU=Employees,",
+      "title": "Development Lead", "department": "Engineering",
+      "password": "D3vL3ad#Fr@nk2025",
+      "groups": ["Engineering-Team", "Project-Phoenix", "Project-Titan"]
+    },
+    {
+      "type": "user", "username": "y.chen",
+      "first": "Yuki", "last": "Chen",
+      "path": "OU=Engineering,OU=Employees,",
+      "title": "Senior Software Developer", "department": "Engineering",
+      "password": "S3n!0rDev#2025Yx",
+      "groups": ["Engineering-Team", "Project-Phoenix"]
+    },
+    {
+      "type": "user", "username": "p.morgan",
+      "first": "Paul", "last": "Morgan",
+      "path": "OU=Engineering,OU=Employees,",
+      "title": "Software Developer", "department": "Engineering",
+      "password": "D3v#P@ulMorg2025!",
+      "groups": ["Engineering-Team", "Project-Titan"]
+    },
+    {
+      "type": "user", "username": "z.ali",
+      "first": "Zara", "last": "Ali",
+      "path": "OU=Engineering,OU=Employees,",
+      "title": "Software Developer", "department": "Engineering",
+      "password": "Z@ra#DevOps2025!x",
+      "groups": ["Engineering-Team"]
+    },
+    {
+      "type": "user", "username": "c.reed",
+      "first": "Chris", "last": "Reed",
+      "path": "OU=Engineering,OU=Employees,",
+      "title": "QA Engineer", "department": "Engineering",
+      "password": "QA#Eng!n33r2025!",
+      "groups": ["Engineering-Team", "Project-Titan"]
+    },
+    {
+      "type": "user", "username": "w.brooks",
+      "first": "Wendy", "last": "Brooks",
+      "path": "OU=Engineering,OU=Employees,",
+      "title": "DevOps Engineer", "department": "Engineering",
+      "password": "D3vOps#W3ndy2025!",
+      "groups": ["Engineering-Team", "Server-Admins"]
+    },
+
+    {
+      "type": "user", "username": "j.martinez",
+      "first": "Juan", "last": "Martinez",
+      "path": "OU=Contractors,OU=Employees,",
+      "title": "IT Intern", "department": "IT",
+      "password": "P@ssw0rd1",
+      "groups": ["IT-Team"]
+    },
+    {
+      "type": "user", "username": "s.wong",
+      "first": "Sandra", "last": "Wong",
+      "path": "OU=Contractors,OU=Employees,",
+      "title": "Contract Developer", "department": "Engineering",
+      "password": "C0ntr@ct#W0ng2025",
+      "groups": ["Engineering-Team"]
+    },
+
+    {
+      "type": "user", "username": "svc_sqldb",
+      "first": "SQL Database", "last": "Service",
+      "path": "OU=Service Accounts,",
+      "title": "SQL Database Service", "department": "Service Accounts",
+      "password": "Passw0rd",
+      "spn": "MSSQLSvc/SVR1.silent.run:1433",
+      "groups": ["Domain Admins", "DB-Admins"]
+    },
+    {
+      "type": "user", "username": "svc_backup",
+      "first": "Backup", "last": "Service",
+      "path": "OU=Service Accounts,",
+      "title": "Backup Service Account", "department": "Service Accounts",
+      "password": "Trustno1!",
+      "groups": ["Backup-Operators"]
+    },
+    {
+      "type": "user", "username": "svc_web",
+      "first": "Web Application", "last": "Service",
+      "path": "OU=Service Accounts,",
+      "title": "Web Application Service", "department": "Service Accounts",
+      "password": "Monkey123",
+      "spn": "HTTP/web.silent.run",
+      "groups": ["IT-Team"]
+    },
+    {
+      "type": "user", "username": "svc_exchange",
+      "first": "Exchange", "last": "Service",
+      "path": "OU=Service Accounts,",
+      "title": "Exchange Service Account", "department": "Service Accounts",
+      "password": "Exch@nge#Svc2025!!",
+      "spn": "exchangeMDB/ROOTDC.silent.run",
+      "groups": ["IT-Team"]
+    },
+    {
+      "type": "user", "username": "svc_print",
+      "first": "Print", "last": "Service",
+      "path": "OU=Service Accounts,",
+      "title": "Print Spooler Service", "department": "Service Accounts",
+      "password": "Pr!nt#Sp00ler2025!",
+      "spn": "printservice/SVR1.silent.run",
+      "groups": []
+    },
+    {
+      "type": "user", "username": "svc_fileshare",
+      "first": "File Share", "last": "Service",
+      "path": "OU=Service Accounts,",
+      "title": "File Share Service", "department": "Service Accounts",
+      "password": "F!leSh@re#Svc2025!",
+      "spn": "CIFS/files.silent.run",
+      "groups": ["File-Share-Access"]
+    }
+  ]
+}

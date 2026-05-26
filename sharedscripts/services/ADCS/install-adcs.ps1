@@ -84,6 +84,7 @@ Write-Host "#### Step 4:Creating vulnerable certificate templates..."
         @{DisplayName = "ESC3_VulnerableTemplate"; JsonPath = "C:\vagrant\sharedscripts\services\ADCS\ESC3_VulnerableTemplate.json"},
         @{DisplayName = "ESC4_VulnerableTemplate"; JsonPath = "C:\vagrant\sharedscripts\services\ADCS\ESC4_VulnerableTemplate.json"}
     )
+    # Note: ESC5-ESC8 are CA-level misconfigurations applied after template import (see Step 5 below)
 
 
 
@@ -101,7 +102,7 @@ Write-Host "#### Step 4:Creating vulnerable certificate templates..."
 
             # Set ACLs for the template
             Write-Host "[*] Setting ACLs for '$($template.DisplayName)'..."
-            Set-ADCSTemplateACL -DisplayName $template.DisplayName -Identity "RED\Domain Users" -Type Allow -Enroll -AutoEnroll -ErrorAction Stop
+            Set-ADCSTemplateACL -DisplayName $template.DisplayName -Identity "SILENT\Domain Users" -Type Allow -Enroll -AutoEnroll -ErrorAction Stop
         }
         catch {
             Write-Host "[!] Error processing template '$($template.DisplayName)': $_"
@@ -130,9 +131,18 @@ Write-Host "#### Step 4:Creating vulnerable certificate templates..."
 #     Write-Host "[!] Error executing commands: $_"
 # }
 
-# Restart IIS and Certificate Services
+# Restart IIS and Certificate Services before ESC5-8
 Write-Host "[*] Restarting services..."
 iisreset /noforce
 Restart-Service certsvc -Force
+
+# Wait for CA service to be fully running before CA-level changes
+Write-Host "#### Step 5: Configuring ESC5, ESC6, ESC7, ESC8 escalation paths ######"
+$esc678Script = "C:\vagrant\sharedscripts\services\ADCS\configure-esc678.ps1"
+if (Test-Path $esc678Script) {
+    & $esc678Script
+} else {
+    Write-Host "[!] configure-esc678.ps1 not found at $esc678Script" -ForegroundColor Red
+}
 
 

@@ -3,6 +3,8 @@
 
 Vagrant.configure("2") do |cfg|
 
+    cfg.vm.boot_timeout = 900
+
     fqdn = "silent.run"
     root_netbios = "SILENT"
 
@@ -53,7 +55,7 @@ Vagrant.configure("2") do |cfg|
         v.memory = 2048
         v.customize ["modifyvm", :id, "--vram", 64]
       end
-      
+
       config.vm.network :private_network,
         :ip => rootdc_ip
 
@@ -74,9 +76,10 @@ Vagrant.configure("2") do |cfg|
       config.vm.provision "shell", reboot: true
 
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/create-ad-objects.ps1 forest-variables.json planned-users.json"
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/create-ad-objects.ps1 forest-variables.json lab-users.json"
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/configure-attack-paths.ps1"
 
-
-      # #Reboot so that scheduled task runs
+      # Reboot so that scheduled task runs
       config.vm.provision "shell", reboot: true
 
     end
@@ -100,10 +103,10 @@ Vagrant.configure("2") do |cfg|
       
       config.vm.provider :virtualbox do |v, override|
         v.name = ADCS_name
-        v.linked_clone = true  # <--- THIS SAVES 30GB+ across the lab
+        v.linked_clone = true  # saves ~30 GB disk per VM vs full clone
         v.gui = false
-        v.cpus = 1
-        v.memory = 1024
+        v.cpus = 2
+        v.memory = 2048
         v.customize ["modifyvm", :id, "--vram", 64]
       end
       
@@ -123,10 +126,11 @@ Vagrant.configure("2") do |cfg|
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/join-domain.ps1 forest-variables.json"
       config.vm.provision "shell", reboot: true
 
-      # Install ActiveDirectory Certificate Services
-      # config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/ADCS/runasAdmin.ps1 forest-variables.json"
-      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/network-setup.ps1"
+      # Install ActiveDirectory Certificate Services (ESC1-ESC8 vulnerable templates)
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/ADCS/install-adcs.ps1"
+      config.vm.provision "shell", reboot: true
 
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/network-setup.ps1"
       config.vm.provision "shell", reboot: true
 
 
@@ -153,7 +157,7 @@ Vagrant.configure("2") do |cfg|
         v.linked_clone = true
         v.gui = false
         v.cpus = 2
-        v.memory = 8192 
+        v.memory = 8192
         v.customize ["modifyvm", :id, "--vram", 64]
       end
       
@@ -163,46 +167,46 @@ Vagrant.configure("2") do |cfg|
       # ========================================================================
       # PHASE 1: INITIAL SYSTEM SETUP
       # ========================================================================
-     
+
+
       # Sysprep: Generate unique SID (required for domain join, prevents SID conflicts)
       config.vm.provision "windows-sysprep"
       config.vm.provision "shell", reboot: true
-      
+
       # Configure regional settings: keyboard layout, language, timezone
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/provision-base.ps1"
 
       # Disable Windows license service to prevent automatic VM shutdown after 180 days
-      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/disable-license-service.ps1"  
-      
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/disable-license-service.ps1"
+
       # ========================================================================
       # PHASE 2: DOMAIN JOIN
       # ========================================================================
-      
-      # Join the SCCM server to SILENT.silent.run domain (uses forest-variables.json for credentials)
+
+      # Join the SCCM server to silent.run domain (uses forest-variables.json for credentials)
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/join-domain.ps1 forest-variables.json"
       config.vm.provision "shell", reboot: true
 
-      # # ========================================================================
-      # # PHASE 3: SCCM PREREQUISITES
-      # # ========================================================================
-      
-      # # Create required AD accounts for SCCM: sccm_admin, sccm_naa, sccm_cp, sccm_dj
-      # # These accounts are used for various SCCM operations and client push
+      # ========================================================================
+      # PHASE 3: SCCM PREREQUISITES
+      # ========================================================================
+
+      # Create required AD accounts for SCCM: sccm_admin, sccm_naa, sccm_cp, sccm_dj
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/SCCM/prepareSccmAccounts.ps1 forest-variables.json"
-      
+
       # Install Windows Server roles/features required by SCCM:
       # - IIS, BITS, RDC, .NET Framework 3.5, Remote Differential Compression
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/SCCM/installDepRoles.ps1"
-      
+
       # Install Windows Assessment and Deployment Kit (ADK):
       # - Required for OS deployment, boot images, and USMT
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/SCCM/installADK.ps1"
       config.vm.provision "shell", reboot: true
-      
+
       # ========================================================================
       # PHASE 4: SQL SERVER INSTALLATION
       # ========================================================================
-      
+
       # Install SQL Server 2019 with SCCM-compatible configuration:
       # - Mixed mode authentication, required collation, memory settings
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/SCCM/installSQL.ps1"
@@ -211,7 +215,7 @@ Vagrant.configure("2") do |cfg|
       # ========================================================================
       # PHASE 5: MECM (SCCM) INSTALLATION
       # ========================================================================
-      
+
       # Install Microsoft Endpoint Configuration Manager (MECM/SCCM):
       # - Primary site installation with site code PS1
       # - Configures Management Point, Distribution Point, and other roles
@@ -341,54 +345,58 @@ Vagrant.configure("2") do |cfg|
 
 
   
-    #This is a domain controller with standard configuration. It creates a single forest and populates the domain with AD objects like users and groups. It can also create specific GPOs and serve as DNS server.
-    # cfg.vm.define "server1" do |config|
-    #   config.vm.box = "StefanScherer/windows_2019"
-    #   config.vm.box_version = "2018.10.03"
-    #   config.vm.hostname = server_name
-    #
-    #   # Use the plaintext WinRM transport and force it to use basic authentication.
-    #   # NB this is needed because the default negotiate transport stops working
-    #   #    after the domain controller is installed.
-    #   #    see https://groups.google.com/forum/#!topic/vagrant-up/sZantuCM0q4
-    #   config.winrm.transport = :plaintext 
-    #   config.winrm.basic_auth_only = true
-    #   config.winrm.retry_limit = 30
-    #   config.winrm.retry_delay = 10
-    #
-    #   config.vm.provider :virtualbox do |v, override|
-    #       v.name = server_name
-    #       v.gui = false
-    #       v.cpus = 2
-    #       v.memory = 2048
-    #       v.customize ["modifyvm", :id, "--vram", 64]
-    #   end
-    #
-    #   config.vm.network :private_network,
-    #       :ip => server_ip
-    #   
-    #   #https://github.com/rgl/vagrant-windows-sysprep
-    #   # config.vm.provision "windows-sysprep"
-    #   # config.vm.provision "shell", reboot: true
-    #       
-    #   # # Configure firewall/keyboard/language/timezone etc.
-    #   # config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/provision-base.ps1"
-    #   # config.vm.provision "shell", reboot: true
-    #
-    #   # # Disable License service to prevent machines from automatic shutdown.
-    #   # config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/disable-license-service.ps1"
-    #   # config.vm.provision "shell", reboot: true
-    #   
-    #   #Join the domain specified in provided variables file - Only do this after everything else has been installed
-    #   # config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/join-domain.ps1 forest-variables.json"
-    #   # config.vm.provision "shell", reboot: true
-    #
-    #   # Configure DNS
-    #   # config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/network-setup.ps1"
-    #   # config.vm.provision "shell", reboot: true      
-    #
-    #   #Reboot so that scheduled task runs
-    #   # config.vm.provision "shell", reboot: true
-    #
-    # end  
+    # ========================================================================
+    # SERVER1 (Generic Member Server / SVR1)
+    # Domain-joined Windows Server used for lateral movement, delegation,
+    # LAPS, and privilege escalation exercises.
+    # ========================================================================
+    cfg.vm.define "server1" do |config|
+      config.vm.box = "StefanScherer/windows_2019"
+      config.vm.box_version = "2018.10.03"
+      config.vm.hostname = server_name
+
+      config.winrm.transport = :plaintext
+      config.winrm.basic_auth_only = true
+      config.winrm.retry_limit = 30
+      config.winrm.retry_delay = 10
+
+      config.vm.provider :virtualbox do |v, override|
+          v.name = server_name
+          v.linked_clone = true
+          v.gui = false
+          v.cpus = 2
+          v.memory = 2048
+          v.customize ["modifyvm", :id, "--vram", 64]
+      end
+
+      config.vm.network :private_network,
+          :ip => server_ip
+
+      # Generate unique SID
+      config.vm.provision "windows-sysprep"
+      config.vm.provision "shell", reboot: true
+
+      # Configure regional settings
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/provision-base.ps1"
+      config.vm.provision "shell", reboot: true
+
+      # Disable License service
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/disable-license-service.ps1"
+      config.vm.provision "shell", reboot: true
+
+      # Join the domain
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/join-domain.ps1 forest-variables.json"
+      config.vm.provision "shell", reboot: true
+
+      # Configure DNS
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/network-setup.ps1"
+      config.vm.provision "shell", reboot: true
+
+      # Apply machine-dependent attack paths (delegation, LAPS, RBCD)
+      # Runs last because it needs SVR1 and ADCS computer objects to exist in AD
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/configure-machine-attacks.ps1 forest-variables.json"
+      config.vm.provision "shell", reboot: true
+
+    end
+
 end

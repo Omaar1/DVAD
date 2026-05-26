@@ -42,16 +42,47 @@ if ($NAAExecutionMode) {
     Start-Transcript -Path "C:\CRED1_NAA_Exec_Log.txt" -Force
     Write-Host "--- NAA SUB-PROCESS STARTED ---" -ForegroundColor Cyan
     
-    # 1. Load Module
+    # 1. Load Module (with fallback paths)
+    $ConsolePath = $null
     $RegKey = "HKLM:\SOFTWARE\Microsoft\ConfigMgr10\Setup"
-    $InstallDir = (Get-ItemProperty -Path $RegKey -Name "UI Installation Directory" -ErrorAction SilentlyContinue)."UI Installation Directory"
-    if ($InstallDir) { 
-        $ConsolePath = Join-Path $InstallDir "bin\ConfigurationManager.psd1" 
-        Import-Module $ConsolePath -ErrorAction Stop
+    
+    if (Test-Path $RegKey) {
+        $InstallDir = (Get-ItemProperty -Path $RegKey -Name "UI Installation Directory" -ErrorAction SilentlyContinue)."UI Installation Directory"
+        if ($InstallDir) {
+            $ConsolePath = Join-Path $InstallDir "bin\ConfigurationManager.psd1"
+        }
     }
     
-    # 2. Connect
-    if (-not (Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue)) {
+    # Fallback: Check Standard Paths if registry lookup fails
+    if (-not $ConsolePath -or -not (Test-Path $ConsolePath)) {
+        $PossiblePaths = @(
+            "$($Env:SMS_ADMIN_UI_PATH)\..\ConfigurationManager.psd1",
+            "C:\Program Files (x86)\Microsoft Endpoint Manager\AdminConsole\bin\ConfigurationManager.psd1",
+            "C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1",
+            "C:\Program Files\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1"
+        )
+        $ConsolePath = $PossiblePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+    }
+    
+    if ($ConsolePath -and (Test-Path $ConsolePath)) {
+        Write-Host " [INFO] Loading module from: $ConsolePath" -ForegroundColor Gray
+        Import-Module $ConsolePath -ErrorAction Stop
+    }
+    else {
+        Write-Error "Could not locate ConfigurationManager.psd1 in any standard location."
+        Stop-Transcript
+        exit 1
+    }
+    
+    # Verify module loaded correctly
+    if (-not (Get-Module -Name ConfigurationManager)) {
+        Write-Error "ConfigurationManager module failed to load."
+        Stop-Transcript
+        exit 1
+    }
+    
+    # 2. Connect to Site
+    if ($null -eq (Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue)) {
         New-PSDrive -Name $SiteCode -PSProvider CMSite -Root $SiteServer -ErrorAction Stop | Out-Null
     }
     Set-Location "$($SiteCode):"
@@ -179,41 +210,53 @@ catch {
 # ==============================================================================
 Start-PhaseTimer -PhaseName "POST-MECM IIS MP FIX"
 try {
-    Invoke-Command -ComputerName $SiteServer -ScriptBlock {
-        Import-Module WebAdministration
+    Import-Module WebAdministration
 
-        # 1. FIX ROOT MP (SMS_MP) - Enable both Windows Auth & Anonymous
-        $RootPath = "IIS:\Sites\Default Web Site\SMS_MP"
-        if (Test-Path $RootPath) {
-            Write-Host "Fixing MP Root: $RootPath"
-            Set-WebConfigurationProperty -Filter "/system.webServer/security/access" -PSPath $RootPath -Name "sslFlags" -Value "None" -ErrorAction SilentlyContinue
-            Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/anonymousAuthentication" -PSPath $RootPath -Name "enabled" -Value $true
-            Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/windowsAuthentication" -PSPath $RootPath -Name "enabled" -Value $true
-        }
-
-        # 2. FIX KEY EXCHANGE (.sms_aut) - MUST BE ANONYMOUS ONLY
-        $AutPath = "IIS:\Sites\Default Web Site\SMS_MP\.sms_aut"
-        if (Test-Path $AutPath) {
-            Write-Host "Fixing Key Exchange: $AutPath"
-            Set-WebConfigurationProperty -Filter "/system.webServer/security/access" -PSPath $AutPath -Name "sslFlags" -Value "None" -ErrorAction SilentlyContinue
-            Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/anonymousAuthentication" -PSPath $AutPath -Name "enabled" -Value $true
-            Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/windowsAuthentication" -PSPath $AutPath -Name "enabled" -Value $false
-        }
-
-        # 3. FIX DP (SMS_DP) - Enable Both
-        $DPPath = "IIS:\Sites\Default Web Site\SMS_DP"
-        if (Test-Path $DPPath) {
-            Write-Host "Fixing DP: $DPPath"
-            Set-WebConfigurationProperty -Filter "/system.webServer/security/access" -PSPath $DPPath -Name "sslFlags" -Value "None" -ErrorAction SilentlyContinue
-            Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/anonymousAuthentication" -PSPath $DPPath -Name "enabled" -Value $true
-            Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/windowsAuthentication" -PSPath $DPPath -Name "enabled" -Value $true
-        }
-
-        # 4. RESTART IIS SERVICES
-        Restart-WebAppPool -Name "DefaultAppPool" -ErrorAction SilentlyContinue
-        Restart-WebAppPool -Name "CMSite" -ErrorAction SilentlyContinue
-        iisreset /restart /timeout:30
+    # Unlock IIS configuration sections at server level using appcmd
+    # This fixes: "This configuration section cannot be used at this path" errors
+    Write-Host " [INFO] Unlocking IIS authentication sections..." -ForegroundColor Gray
+    $appcmd = "$env:SystemRoot\System32\inetsrv\appcmd.exe"
+    if (Test-Path $appcmd) {
+        & $appcmd unlock config -section:system.webServer/security/authentication/anonymousAuthentication /commit:apphost 2>$null
+        & $appcmd unlock config -section:system.webServer/security/authentication/windowsAuthentication /commit:apphost 2>$null
+        & $appcmd unlock config -section:system.webServer/security/access /commit:apphost 2>$null
+        Write-Host " [OK] IIS sections unlocked." -ForegroundColor Green
     }
+    else {
+        Write-Warning "appcmd.exe not found - IIS sections may remain locked"
+    }
+
+    # 1. FIX ROOT MP (SMS_MP) - Enable both Windows Auth & Anonymous
+    $RootPath = "IIS:\Sites\Default Web Site\SMS_MP"
+    if (Test-Path $RootPath) {
+        Write-Host "Fixing MP Root: $RootPath"
+        Set-WebConfigurationProperty -Filter "/system.webServer/security/access" -PSPath $RootPath -Name "sslFlags" -Value "None" -ErrorAction SilentlyContinue
+        Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/anonymousAuthentication" -PSPath $RootPath -Name "enabled" -Value $true -ErrorAction SilentlyContinue
+        Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/windowsAuthentication" -PSPath $RootPath -Name "enabled" -Value $true -ErrorAction SilentlyContinue
+    }
+
+    # 2. FIX KEY EXCHANGE (.sms_aut) - MUST BE ANONYMOUS ONLY
+    $AutPath = "IIS:\Sites\Default Web Site\SMS_MP\.sms_aut"
+    if (Test-Path $AutPath) {
+        Write-Host "Fixing Key Exchange: $AutPath"
+        Set-WebConfigurationProperty -Filter "/system.webServer/security/access" -PSPath $AutPath -Name "sslFlags" -Value "None" -ErrorAction SilentlyContinue
+        Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/anonymousAuthentication" -PSPath $AutPath -Name "enabled" -Value $true -ErrorAction SilentlyContinue
+        Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/windowsAuthentication" -PSPath $AutPath -Name "enabled" -Value $false -ErrorAction SilentlyContinue
+    }
+
+    # 3. FIX DP (SMS_DP) - Enable Both
+    $DPPath = "IIS:\Sites\Default Web Site\SMS_DP"
+    if (Test-Path $DPPath) {
+        Write-Host "Fixing DP: $DPPath"
+        Set-WebConfigurationProperty -Filter "/system.webServer/security/access" -PSPath $DPPath -Name "sslFlags" -Value "None" -ErrorAction SilentlyContinue
+        Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/anonymousAuthentication" -PSPath $DPPath -Name "enabled" -Value $true -ErrorAction SilentlyContinue
+        Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/windowsAuthentication" -PSPath $DPPath -Name "enabled" -Value $true -ErrorAction SilentlyContinue
+    }
+
+    # 4. RESTART IIS SERVICES
+    Restart-WebAppPool -Name "DefaultAppPool" -ErrorAction SilentlyContinue
+    Restart-WebAppPool -Name "CMSite" -ErrorAction SilentlyContinue
+    iisreset /restart /timeout:30
     
     Write-Host " [OK] MP IIS bindings fixed (Split Logic)." -ForegroundColor Green
     Stop-PhaseTimer -Status Success

@@ -4,126 +4,149 @@
 ![Language](https://img.shields.io/badge/Automation-PowerShell-5391FE?style=for-the-badge&logo=powershell)
 ![Focus](https://img.shields.io/badge/Focus-AD_/_ADCS_/_SCCM-red?style=for-the-badge)
 
-# 🔬 AutoAD Attack Range
+# SilentRUN-Lab — AutoAD Attack Range
 
 > **A zero-touch Infrastructure-as-Code pipeline that deploys a realistic, deliberately vulnerable enterprise Active Directory environment — ready for red team exercises in under an hour.**
 
-Manually building multi-server Windows lab environments for security research takes days and is error-prone. AutoAD Attack Range eliminates that overhead. A single `vagrant up` provisions a fully functional AD forest with a Certificate Authority, SQL Server, and MECM/SCCM — all pre-configured with intentional security misconfigurations that mirror real-world enterprise flaws.
+Manually building multi-server Windows lab environments for security research takes days and is error-prone. SilentRUN-Lab eliminates that overhead. A single `vagrant up` provisions a fully functional AD forest with a Certificate Authority, SQL Server, MECM/SCCM, and a domain-joined member server — all pre-configured with intentional security misconfigurations that mirror real-world enterprise flaws.
 
 ---
 
-## 🏗️ Lab Architecture
+## Lab Architecture
 
 ```
-                    ┌─────────────────────────────┐
-                    │      silent.run (Forest)     │
-                    │           ROOTDC             │
-                    │        10.10.10.100          │
-                    └──────────┬───────────────────┘
-                               │
-         ┌─────────────────────┼──────────────────────┐
-         │                     │                      │
-┌────────┴────────┐  ┌─────────┴───────┐  ┌──────────┴──────────┐
-│   ADCS          │  │   SCCM / MECM   │  │   SQL Server        │
-│   Certificate   │  │   Config Mgr    │  │   (co-hosted on     │
-│   Authority     │  │   10.10.10.104  │  │    SCCM node)       │
-│   10.10.10.103  │  └─────────────────┘  └─────────────────────┘
+                    ┌──────────────────────────────┐
+                    │      silent.run (Forest)      │
+                    │           ROOTDC              │
+                    │        10.10.10.100           │
+                    └───────────┬──────────────────┘
+                                │
+         ┌──────────────────────┼──────────────────────┬─────────────────┐
+         │                      │                      │                 │
+┌────────┴────────┐  ┌──────────┴──────┐  ┌───────────┴──────┐ ┌───────┴──────┐
+│   ADCS          │  │   SCCM / MECM   │  │   SQL Server      │ │    SVR1      │
+│   Certificate   │  │   Config Mgr    │  │   (co-hosted on   │ │ Member Server│
+│   Authority     │  │   10.10.10.104  │  │    SCCM node)     │ │ 10.10.10.150 │
+│   10.10.10.103  │  └─────────────────┘  └───────────────────┘ └──────────────┘
 └─────────────────┘
 ```
 
-| Machine | IP Address | Role |
-| --- | --- | --- |
-| **RootDC** | `10.10.10.100` | Forest Root DC / Primary DNS |
-| **ADCS** | `10.10.10.103` | Enterprise Root Certificate Authority |
-| **SCCM** | `10.10.10.104` | Microsoft Endpoint Configuration Manager + SQL |
+| Machine | IP Address | Role | vCPUs | RAM |
+| --- | --- | --- | --- | --- |
+| **RootDC** | `10.10.10.100` | Forest Root DC / Primary DNS | 2 | 2 GB |
+| **ADCS** | `10.10.10.103` | Enterprise Root Certificate Authority | 2 | 2 GB |
+| **SCCM** | `10.10.10.104` | Microsoft Endpoint Configuration Manager + SQL | 2 | 8 GB |
+| **SVR1** | `10.10.10.150` | Domain-joined Member Server | 2 | 2 GB |
+
+**Total lab RAM: ~14 GB** — 16 GB host minimum, 32 GB recommended.
 
 ---
 
-## 🎯 Why This Exists
+## Why This Exists
 
-Setting up AD, ADCS, SQL, and MECM concurrently is resource-intensive and brittle. Security teams end up spending days on infrastructure instead of practicing attack paths. AutoAD Attack Range solves this with:
+Setting up AD, ADCS, SQL, and MECM concurrently is resource-intensive and brittle. Security teams end up spending days on infrastructure instead of practicing attack paths. SilentRUN-Lab solves this with:
 
-- **Zero-touch provisioning** — Vagrant and PowerShell handle everything from forest creation to SCCM vulnerability injection
+- **Zero-touch provisioning** — Vagrant and PowerShell handle everything from forest creation to vulnerability injection
 - **Offline payload handling** — DISM-based .NET/ADK installation and pre-staged MECM installers keep provisioning reliable on slow or air-gapped networks
 - **Linked Clone optimization** — minimizes disk footprint across multiple heavy Windows VMs
 - **Repeatable and disposable** — spin up, test, destroy, repeat
 
 ---
 
-## 🖥️ Lab Components
+## Lab Components & Attack Paths
 
 ### 1. RootDC — Forest Root Domain Controller
 
-Provisions the `silent.run` AD forest, creates the root domain, and populates Active Directory with OUs, tiered security groups, and user accounts. Serves as the primary DNS server for the entire lab network.
+Provisions the `silent.run` AD forest, creates the root domain, and populates Active Directory with OUs, tiered security groups, 50+ user accounts, and service accounts. Serves as the primary DNS server.
 
-- **Domain:** `silent.run`
+- **Domain:** `silent.run` (NetBIOS: `SILENT`)
 - **Resources:** 2 vCPUs, 2 GB RAM
 
-#### 🎯 Attack Paths
+#### Attack Paths
 
-- **Kerberoasting** — Offline cracking of service account TGS hashes
-- **AS-REP Roasting** — Targeting accounts with pre-authentication disabled
-- **DCSync** — Credential extraction via Directory Replication Services
-- **Golden Ticket** — TGT forgery using the KRBTGT hash
-- **Silver Ticket** — Service-specific TGS forgery
-- **ACL Abuse** — Misconfigured object permissions enabling privilege escalation
-- **Delegation Abuse** — Unconstrained and constrained Kerberos delegation exploitation
-- **GPO Abuse** — Privilege escalation via misconfigured Group Policy Objects
-- **AdminSDHolder Abuse** — Persistence via protected group ACL manipulation
+| Attack | Detail |
+|---|---|
+| **Kerberoasting** | `svc_sqldb` — Domain Admin with MSSQLSvc SPN and weak password (`Passw0rd`) |
+| **AS-REP Roasting** | `j.martinez` — pre-authentication disabled |
+| **DCSync** | `gmsa_svc$` — GMSA with DS-Replication-Get-Changes rights |
+| **Golden Ticket** | TGT forgery using extracted KRBTGT hash |
+| **ACL Chain 1** | `j.martinez` GenericWrite → `r.chen` WriteOwner → `Server-Admins` WriteDACL → Domain Admins |
+| **ACL Chain 2** | `a.johnson` GenericAll → `Helpdesk-Operators` GenericWrite → `svc_backup` (Backup Operators / NTDS dump) |
+| **ACL Chain 3** | `m.wilson` ForceChangePassword → `k.lee` Self-Membership → `Project-Phoenix` WriteDACL → Enterprise Admins |
+| **ACL Chain 4** | `d.patel` WriteOwner → `GMSA-Readers` → `gmsa_svc$` DCSync rights |
+| **AdminSDHolder** | GenericAll on AdminSDHolder for persistence |
+| **Anonymous LDAP** | `dSHeuristics` set — unauthenticated LDAP enumeration |
 
 ---
 
 ### 2. ADCS — Active Directory Certificate Services
 
-Enterprise Root CA joined to `silent.run`. Deployed with vulnerable certificate templates covering the most impactful ESC escalation paths used in modern engagements.
+Enterprise Root CA joined to `silent.run`. Deployed with vulnerable certificate templates and CA-level misconfigurations covering ESC1-ESC8.
 
 - **CA Type:** Enterprise Root CA
-- **Resources:** 1 vCPU, 1 GB RAM
+- **Resources:** 2 vCPUs, 2 GB RAM
 
-#### 🎯 Attack Paths
+#### Attack Paths
 
-- **ESC1** — Low-privileged enrollment for auth certificates with arbitrary Subject Alternative Names
-- **ESC2** — Any Purpose EKU or unrestricted EKU on enrollable templates
-- **ESC3** — Certificate Request Agent template abuse for enrollment on behalf of others
-- **ESC4** — Weak ACLs on certificate templates allowing modification
-- **ESC8** — NTLM relay to AD CS HTTP enrollment endpoints
-- **Certifried (CVE-2022-26923)** — Machine account certificate spoofing for domain privilege escalation
+| Attack | Detail |
+|---|---|
+| **ESC1** | Low-privileged enrollment for auth certs with arbitrary Subject Alternative Names |
+| **ESC2** | Any Purpose EKU or unrestricted EKU on enrollable templates |
+| **ESC3** | Certificate Request Agent template abuse (enrollment on behalf of others) |
+| **ESC4** | Weak ACLs on certificate templates — `Domain Users` can modify |
+| **ESC5** | `l.garcia` has GenericAll on the CA AD object — PKI takeover |
+| **ESC6** | `EDITF_ATTRIBUTESUBJECTALTNAME2` enabled on CA — arbitrary SAN on any cert |
+| **ESC7** | `a.johnson` has ManageCA right — can enable ESC6 or self-issue certs |
+| **ESC8** | Web Enrollment on HTTP with NTLM (no EPA, no SSL) — relay-vulnerable |
+| **Certifried** | CVE-2022-26923 — machine account cert spoofing for domain privilege escalation |
 
 ---
 
-### 3. SCCM — Microsoft Endpoint Configuration Manager
+### 3. SVR1 — Domain-Joined Member Server
 
-The primary attack target of this lab. MECM is deployed with unattended SQL provisioning and pre-injected misconfigurations that replicate the most commonly abused SCCM attack surface in enterprise environments.
+Generic Windows Server 2019 domain member used for lateral movement, Kerberos delegation, and LAPS exploitation exercises.
 
-- **Resources:** 2 vCPUs, 6 GB RAM
+- **Resources:** 2 vCPUs, 2 GB RAM
+
+#### Attack Paths
+
+| Attack | Detail |
+|---|---|
+| **Unconstrained Delegation** | `TrustedForDelegation = $true` — TGTs cached in memory; capture via printer bug / coercion |
+| **Constrained Delegation** | `svc_web` delegates to `CIFS/ROOTDC` with protocol transition (S4U2Self) |
+| **RBCD** | `l.garcia` GenericWrite on `ADCS$` — can set `msDS-AllowedToActOnBehalfOfOtherIdentity` |
+| **LAPS** | `t.brown` has AllExtendedRights on `SVR1$` — reads `ms-Mcs-AdmPwd` (local admin password) |
+
+---
+
+### 4. SCCM — Microsoft Endpoint Configuration Manager
+
+The primary SCCM attack target. MECM is deployed with unattended SQL provisioning and pre-injected misconfigurations that replicate the most commonly abused SCCM attack surface.
+
+- **Resources:** 2 vCPUs, 8 GB RAM
 - **SQL Server:** Auto-provisioned during deployment
 
-#### 🎯 Attack Paths
+#### Attack Paths
 
-- **CRED-1 — PXE Boot (No Password)**
-  PXE boot is enabled without password protection. Attackers can boot from the network and retrieve the Network Access Account credential (`SILENT\sccm_naa`) directly from the policy.
-
-- **CRED-2 — Exposed Task Sequence**
-  A task sequence deployed to the "All Systems" collection contains exposed variables or embedded credentials readable by low-privileged clients.
-
-- **Client Push Installation Abuse**
-  Client push is enabled using `SILENT\sccm_cpia`. Controlling a target machine during push enables credential capture via relay or LSASS dumping.
-
-- **Anonymous Distribution Point Looting**
-  A distribution point is configured with anonymous access or exposes sensitive package content retrievable without authentication.
+| Attack | Detail |
+|---|---|
+| **CRED-1 — PXE Boot / NAA** | PXE enabled without password — boot unknown machine, retrieve `SILENT\sccm_naa` creds from policy |
+| **CRED-2 — Task Sequence Variables** | Task sequence deployed to All Systems with exposed variables and embedded credentials |
+| **CRED-3 — Client Push** | `SILENT\sccm_cpia` — trigger NTLM coercion during client push to capture hash |
+| **CRED-4 — Anonymous DP Looting** | Distribution point with anonymous access or sensitive package content |
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
 | Requirement | Notes |
 | --- | --- |
-| [Vagrant](https://www.vagrantup.com/downloads) ≥ 2.3.x | `winget install --id HashiCorp.Vagrant` |
-| [VirtualBox](https://www.virtualbox.org/wiki/Downloads) ≥ 7.x | Primary hypervisor |
+| [Vagrant](https://www.vagrantup.com/downloads) >= 2.3.x | `winget install --id HashiCorp.Vagrant` |
+| [VirtualBox](https://www.virtualbox.org/wiki/Downloads) >= 7.x | Primary hypervisor |
 | RAM | 16 GB minimum — 32 GB recommended |
-| Disk | 100 GB free SSD space recommended |
+| Disk | 120 GB free SSD space recommended |
 
 ### Vagrant Plugins
 
@@ -140,83 +163,127 @@ cd SilentRUN-Lab
 vagrant up
 ```
 
-Provisioning takes **30–60+ minutes** depending on disk I/O and internet speed.
+Or use the ordered startup helper (recommended for first-time provisioning):
+
+```powershell
+.\start-lab.ps1
+```
+
+Provisioning takes **60-90+ minutes** depending on disk I/O and internet speed.
 
 > **Tip:** To avoid a large download during provisioning, manually place `MEM_Configmgr_Eval.exe` (~1.2 GB) in `sharedscripts/services/SCCM/MECM_Setup/` before running `vagrant up`.
 
+### Verify
 
+```powershell
+.\verify-lab.ps1
+```
 
-> ⚠️ **This lab is intentionally vulnerable. Never expose it to untrusted networks.**
+Checks IP reachability, WinRM connectivity, and key service status for all VMs.
+
+> **Warning:** This lab is intentionally vulnerable. Never expose it to untrusted networks.
 
 ---
 
-## 📁 Project Structure
+## User Accounts
+
+### Service Accounts (Attack Targets)
+
+| Account | Password | Attack Path |
+| --- | --- | --- |
+| `SILENT\svc_sqldb` | `Passw0rd` | Kerberoasting (DA + MSSQLSvc SPN) |
+| `SILENT\svc_backup` | `Trustno1!` | NTDS dump via Backup Operators |
+| `SILENT\svc_web` | `Monkey123` | Constrained delegation to CIFS/ROOTDC |
+| `SILENT\j.martinez` | `P@ssw0rd1` | AS-REP Roasting (pre-auth disabled) |
+| `SILENT\sccm_naa` | set by SCCM | PXE/NAA credential theft (CRED-1) |
+| `SILENT\sccm_cpia` | set by SCCM | Client push NTLM coercion (CRED-3) |
+
+### Tiered Admin Accounts
+
+| Account | Password | Role |
+| --- | --- | --- |
+| `SILENT\Administrator` | `P@ssw0rd` | Domain Admin |
+| `SILENT\t0_example.user` | set in planned-users.json | Tier 0 (Domain Admin equivalent) |
+| `SILENT\t1_example.user` | set in planned-users.json | Tier 1 (Server Admin) |
+| `SILENT\t2_example.user` | set in planned-users.json | Tier 2 (Workstation Admin) |
+
+---
+
+## Project Structure
 
 ```
 SilentRUN-Lab/
-├── Vagrantfile                            # Lab orchestration and VM definitions
-├── SilentRUN_Lab_Guide.md                 # Detailed lab notes and attack context
+├── Vagrantfile                              # Lab orchestration and VM definitions
+├── start-lab.ps1                            # Ordered VM startup helper
+├── verify-lab.ps1                           # Post-deploy health check
+├── SilentRUN_Lab_Guide.md                   # Detailed lab notes and attack context
 ├── provision/
-│   └── variables/                         # JSON/CSV config for AD objects and DNS
+│   └── variables/
+│       ├── forest-variables.json            # Domain config (name, password, DC IP)
+│       ├── planned-users.json               # Tiered admin structure (Tier 0/1/2)
+│       ├── lab-users.json                   # 46 departmental users + service accounts
+│       └── dns_entries.csv                  # DNS records
 └── sharedscripts/
-    ├── ps.ps1                             # PowerShell execution wrapper
+    ├── ps.ps1                               # PowerShell execution wrapper
     ├── ad/
-    │   ├── install-forest.ps1             # Forest and root domain setup
-    │   ├── join-domain.ps1                # Domain join automation
-    │   └── create-ad-objects.ps1          # OU, user, and group creation
+    │   ├── install-forest.ps1               # Forest and root domain setup
+    │   ├── join-domain.ps1                  # Domain join automation
+    │   ├── create-ad-objects.ps1            # OU, user, and group creation
+    │   ├── configure-attack-paths.ps1       # ACL chains, Kerberoast, AS-REP, GMSA, LAPS
+    │   └── configure-machine-attacks.ps1    # Delegation, RBCD (runs on SVR1)
     ├── networking/
-    │   ├── network-setup.ps1              # Network config dispatcher
-    │   └── network-setup-rootdc.ps1       # Root DC DNS configuration
+    │   ├── network-setup.ps1                # Network config dispatcher
+    │   └── network-setup-rootdc.ps1         # Root DC DNS configuration
     ├── windows/
-    │   └── provision-base.ps1             # Base OS configuration
+    │   └── provision-base.ps1               # Base OS configuration
+    ├── tools/
+    │   ├── anonBind.ps1                     # Anonymous LDAP bind (dSHeuristics)
+    │   └── null-session.ps1                 # Null session share configuration
     └── services/
         ├── ADCS/
-        │   ├── install-adcs.ps1           # CA install and vulnerable template deployment
-        │   └── ESC[1-4]_VulnerableTemplate.json
+        │   ├── install-adcs.ps1             # CA install + ESC1-4 template deployment
+        │   ├── configure-esc678.ps1         # CA-level ESC5-8 misconfigurations
+        │   ├── ESC[1-5]_VulnerableTemplate.json
+        │   └── ADCSTemplate/                # Module for managing certificate templates
         └── SCCM/
-            └── MECM_Setup/               # MECM installer drop location
+            ├── installMECM.ps1              # MECM primary site installation
+            ├── installSQL.ps1               # SQL Server 2019
+            ├── installADK.ps1               # Windows ADK
+            ├── installDepRoles.ps1          # IIS, BITS, .NET prerequisites
+            ├── prepareSccmAccounts.ps1      # SCCM service account creation
+            ├── Vuln-NAA-PXE.ps1             # CRED-1: PXE without password
+            ├── Vuln-TS-Variables.ps1        # CRED-2: Task sequence variable exposure
+            ├── Vuln-ClientPush.ps1          # CRED-3: Client push installation
+            └── Vuln-App-Package.ps1         # CRED-4: Anonymous DP looting
 ```
 
 ---
 
-## 🗺️ Project Phases
+## Project Phases
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| **Phase 1** | Core AD and ADCS automation | ✅ Completed |
-| **Phase 2** | MECM and SQL integration | ✅ Completed |
-| **Phase 3** | SCCM vulnerability injection (PXE / NAA / Client Push) | ✅ Completed |
-| **Phase 4** | Basic AD attack paths (ACL misconfigs, delegation abuse) | 🔄 In Progress |
-| **Phase 5** | Storage optimization and final code release | 🔜 Upcoming |
-| **Phase 6** | Extended AD attacks with domain trust focus | 🔜 Upcoming |
+| **Phase 1** | Core AD and ADCS automation | Completed |
+| **Phase 2** | MECM and SQL integration | Completed |
+| **Phase 3** | SCCM vulnerability injection (PXE / NAA / Client Push / DP) | Completed |
+| **Phase 4** | AD attack paths (ACL chains, Kerberoast, AS-REP, delegation, LAPS) | Completed |
+| **Phase 5** | ESC5-ESC8, SVR1 member server, 50+ realistic users | Completed |
+| **Phase 6** | Lab automation (start-lab.ps1, verify-lab.ps1) | Completed |
+| **Phase 7** | Child domain / trust exploitation | Upcoming |
+| **Phase 8** | Workstation node + detection layer (Sysmon) | Upcoming |
 
 ---
 
-## 🔭 Future Work
-
-- **Complete Phase 3 SCCM injection** — Finalize and validate all four attack paths (CRED-1, CRED-2, client push, DP looting) end-to-end against the current build.
-- **Domain trust attack scenarios (Phase 6)** — Extend the forest to include a child domain or external trust for SID history injection, cross-domain TGT forgery, and trust ticket abuse exercises.
-- **Modular deployment** — Allow users to provision individual components (AD only, AD + ADCS, full stack) rather than always spinning up the entire environment, reducing resource requirements for targeted testing.
-- **Workstation node** — Add a domain-joined Windows workstation (`wks01`) to support lateral movement, tools installation and privelege escalation.
-- **Step-by-step attack walkthroughs** — Write attacker-perspective guides for each attack path covering tooling, commands, and expected results. 
-- **Optional detection layer** — Integrate a lightweight Sysmon + log forwarding stack to support blue team and detection engineering use alongside the red team content.
-
----
-
-## ⚠️ Known Challenges
+## Known Challenges
 
 **Resource consumption** — MECM and multiple Windows Servers are inherently heavy. Linked Clones and tuned VM resource allocations keep the footprint manageable, but 16 GB RAM and SSD storage are hard minimums for stable operation.
 
-**Provisioning stability** — Sequential multi-server deployment can span 60+ minutes. Parallel provisioning introduces I/O bottlenecks and intermittent WinRM drops during domain joins, particularly affecting SCCM and SQL initialization timing.
+**Provisioning time** — Full provisioning spans 60-90+ minutes. The SCCM VM alone takes 40+ minutes to install SQL Server, ADK, and MECM. The `boot_timeout = 900` setting prevents WinRM drops during long installations.
 
-**Lab inflexibility** — The current monolithic design requires provisioning the full stack even when only a base AD environment is needed. Modular deployment is planned as a Phase 5 improvement.
+**MECM installer** — The 1.2 GB `MEM_Configmgr_Eval.exe` is downloaded during provisioning if not pre-staged. Pre-staging it in `sharedscripts/services/SCCM/MECM_Setup/` saves significant time on slow connections.
 
 ---
 
-## 📝 License
+## License
 
 This project is intended for **educational and research purposes only**. Use responsibly and only in isolated lab environments.
-
----
-
-*Happy Hacking! 🏴‍☠️*

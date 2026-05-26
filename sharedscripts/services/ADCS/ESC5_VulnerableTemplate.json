@@ -1,0 +1,5 @@
+{
+  "_comment": "ESC5 - Writable ACL on the CA object itself. The l.garcia user is granted GenericAll on the CA AD object, allowing modification of CA settings including adding new templates or changing the CA certificate.",
+  "_attack": "With GenericAll on the CA object in AD (CN=SILENT-CA,CN=Enrollment Services,...), an attacker can modify CA properties, add new certificate templates, or change the CA certificate — effectively owning the entire PKI.",
+  "_tool": "certipy find / BloodHound — look for GenericAll/WriteDacl on CN=Enrollment Services objects"
+}
