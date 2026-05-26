@@ -15,46 +15,6 @@ Write-Host "======================================" -ForegroundColor Cyan
 Write-Host " SilentRUN-Lab" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
 
-# ----------------------------------------------------------------
-# 0. Ensure we are running from inside the repo
-#    (handles fresh remote server deployments via git clone)
-# ----------------------------------------------------------------
-if (-not (Test-Path ".\Vagrantfile")) {
-    Write-Host ""
-    Write-Host "[0] Vagrantfile not found — cloning repo..." -ForegroundColor Yellow
-
-    $gitCmd  = Get-Command git -ErrorAction SilentlyContinue
-    $gitPath = $null
-    if ($gitCmd) { $gitPath = $gitCmd.Source }
-    if (-not $gitPath) {
-        Write-Host "[!] Git not found. Install it first:" -ForegroundColor Red
-        Write-Host "      winget install --id Git.Git -e --source winget" -ForegroundColor Red
-        Write-Host "    Then open a new PowerShell and re-run this script." -ForegroundColor Red
-        exit 1
-    }
-
-    if (-not (Test-Path $cloneDest)) {
-        Write-Host "  [*] git clone $repoUrl -> $cloneDest"
-        git clone $repoUrl $cloneDest
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "[!] Clone failed — check network connectivity." -ForegroundColor Red
-            exit 1
-        }
-        Write-Host "  [+] Clone complete" -ForegroundColor Green
-    } else {
-        Write-Host "  [*] $cloneDest already exists — pulling latest..."
-        git -C $cloneDest pull
-        Write-Host "  [+] Up to date" -ForegroundColor Green
-    }
-
-    Set-Location $cloneDest
-    Write-Host "  Working directory: $cloneDest"
-} elseif (Test-Path ".git") {
-    Write-Host ""
-    Write-Host "[0] Pulling latest changes..." -ForegroundColor Yellow
-    git pull 2>&1 | Out-Null
-    Write-Host "  [+] Up to date" -ForegroundColor Green
-}
 
 # ----------------------------------------------------------------
 # 1. Verify Vagrant and VirtualBox
@@ -93,18 +53,11 @@ Write-Host "[2] Checking Vagrant plugins..." -ForegroundColor Yellow
 
 $installedPlugins = vagrant plugin list 2>&1
 
-foreach ($plugin in @("vagrant-winrm", "vagrant-windows-sysprep")) {
-    if ($installedPlugins -match $plugin) {
-        Write-Host "  [OK] $plugin"
-    } else {
-        Write-Host "  [*] Installing $plugin..."
-        vagrant plugin install $plugin
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "  [!] Failed to install $plugin" -ForegroundColor Red
-            exit 1
-        }
-        Write-Host "  [+] $plugin installed" -ForegroundColor Green
-    }
+if ($installedPlugins -match "vagrant-winrm") {
+    Write-Host "  [OK] vagrant-winrm"
+} else {
+    Write-Host "[!] vagrant-winrm plugin is missing. Run setup-lab.ps1 first." -ForegroundColor Red
+    exit 1
 }
 
 # ----------------------------------------------------------------
