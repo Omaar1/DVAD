@@ -214,7 +214,8 @@ if (-not `$gmsaExists) {
 $gmsaScript | Out-File -FilePath "C:\setup_gmsa.ps1" -Encoding UTF8
 Remove-Item "C:\gmsa_setup_status.txt" -Force -ErrorAction SilentlyContinue
 
-schtasks /create /f /tn "SetupGMSA" /sc once /st 00:00 /rl highest /ru "$netbios\Administrator" /rp $adminPw /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\setup_gmsa.ps1" 2>&1 | Out-Null
+$tomorrow = (Get-Date).AddDays(1).ToString("MM/dd/yyyy")
+schtasks /create /f /tn "SetupGMSA" /sc once /sd $tomorrow /st 00:00 /rl highest /ru "$netbios\Administrator" /rp $adminPw /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\setup_gmsa.ps1" 2>&1 | Out-Null
 schtasks /run /tn "SetupGMSA" 2>&1 | Out-Null
 
 $elapsed = 0
@@ -290,7 +291,7 @@ if (`$svr1) {
 $lapsScript | Out-File -FilePath "C:\setup_laps.ps1" -Encoding UTF8
 Remove-Item "C:\laps_setup_status.txt" -Force -ErrorAction SilentlyContinue
 
-schtasks /create /f /tn "SetupLAPS" /sc once /st 00:00 /rl highest /ru "$netbios\Administrator" /rp $adminPw /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\setup_laps.ps1" 2>&1 | Out-Null
+schtasks /create /f /tn "SetupLAPS" /sc once /sd $tomorrow /st 00:00 /rl highest /ru "$netbios\Administrator" /rp $adminPw /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\setup_laps.ps1" 2>&1 | Out-Null
 schtasks /run /tn "SetupLAPS" 2>&1 | Out-Null
 
 $elapsed = 0
