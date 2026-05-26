@@ -304,7 +304,7 @@ Remove-Item "C:\setup_laps.ps1" -Force -ErrorAction SilentlyContinue
 if (Test-Path "C:\laps_setup_status.txt") {
     Write-Host "  [LAPS] Schema extended and SVR1 password set"
 } else {
-    Write-Host "  [WARN] LAPS setup timed out — SVR1 may not have joined yet (AllExtendedRights still set)" -ForegroundColor Yellow
+    Write-Host "  [WARN] LAPS setup timed out - SVR1 may not have joined yet (AllExtendedRights still set)" -ForegroundColor Yellow
 }
 
 $svr1 = Get-ADComputer "SVR1" -ErrorAction SilentlyContinue
@@ -312,7 +312,7 @@ if ($svr1) {
     Set-ADObjectACE -TargetDN $svr1.DistinguishedName -PrincipalSAM "t.brown" -RightType "AllExtendedRights"
     Write-Host "  [OK] t.brown: AllExtendedRights on SVR1$" -ForegroundColor Green
 } else {
-    Write-Host "  [WARN] SVR1 not in AD yet — AllExtendedRights will be set by configure-machine-attacks.ps1" -ForegroundColor Yellow
+    Write-Host "  [WARN] SVR1 not in AD yet - AllExtendedRights will be set by configure-machine-attacks.ps1" -ForegroundColor Yellow
 }
 
 Write-Host "  [OK] AllExtendedRights -> LAPS chain ready" -ForegroundColor Green
@@ -355,7 +355,7 @@ try {
     $dircfg = [ADSI]"LDAP://$dircfgDN"
     $dircfg.put("dSHeuristics", "0000002")
     $dircfg.SetInfo()
-    Write-Host "  [ANON] dSHeuristics set — anonymous LDAP queries enabled" -ForegroundColor Yellow
+    Write-Host "  [ANON] dSHeuristics set - anonymous LDAP queries enabled" -ForegroundColor Yellow
 } catch {
     Write-Host "  [WARN] Could not set dSHeuristics: $_" -ForegroundColor Red
 }
