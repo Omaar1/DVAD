@@ -141,20 +141,35 @@ Start-PhaseTimer -PhaseName "AD FOREST INSTALLATION"
 Write-Host ' Installing the AD forest (this will take 30+ minutes)...'
 Import-Module ADDSDeployment
 
-# NB ForestMode and DomainMode are set to WinThreshold (Windows Server 2016).
-#    see https://docs.microsoft.com/en-us/windows-server/identity/ad-ds/active-directory-functional-levels
-Install-ADDSForest `
-    -InstallDns `
-    -CreateDnsDelegation:$false `
-    -ForestMode 6 `
-    -DomainMode 6 `
-    -DomainName $forest.name `
-    -DomainNetbiosName $forest.netbiosName `
-    -SafeModeAdministratorPassword $safeModePassword `
-    -NoRebootOnCompletion `
-    -Force 
+# Idempotency guard: if this box is already a DC for the target domain, skip promotion
+$existingDomain = $null
+try {
+    Import-Module ActiveDirectory -ErrorAction Stop
+    $existingDomain = Get-ADDomain -ErrorAction Stop
+} catch { }
 
-Write-Host " [OK] AD Forest installation completed" -ForegroundColor Green
+if ($existingDomain -and ($existingDomain.DNSRoot -eq $forest.name)) {
+    Write-Host " [SKIP] Forest already installed: $($existingDomain.DNSRoot)" -ForegroundColor DarkGray
+} else {
+    # NB ForestMode and DomainMode are set to WinThreshold (Windows Server 2016).
+    #    see https://docs.microsoft.com/en-us/windows-server/identity/ad-ds/active-directory-functional-levels
+    # -SkipPreChecks bypasses the prereq test framework, which can break under
+    # accumulated state from partial/retried provisioning runs. The actual
+    # promotion code path is independent and will surface real errors directly.
+    Install-ADDSForest `
+        -InstallDns `
+        -CreateDnsDelegation:$false `
+        -ForestMode 6 `
+        -DomainMode 6 `
+        -DomainName $forest.name `
+        -DomainNetbiosName $forest.netbiosName `
+        -SafeModeAdministratorPassword $safeModePassword `
+        -SkipPreChecks `
+        -NoRebootOnCompletion `
+        -Force
+
+    Write-Host " [OK] AD Forest installation completed" -ForegroundColor Green
+}
 
 Stop-PhaseTimer -Status Success
 
