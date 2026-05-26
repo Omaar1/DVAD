@@ -74,22 +74,38 @@ Start-PhaseTimer -PhaseName "DNS SERVER CONFIGURATION"
 
 Write-Host ' Configuring DNS Server settings...'
 if (Get-WindowsFeature -Name DNS | Where-Object { $_.Installed -eq $true }) {
-    # Bind DNS Server to specific IP
-    Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\DNS\Parameters' -Name 'ListenAddresses' -Value @($ip)
-    Write-Host " [OK] DNS bound to $ip" -ForegroundColor Green
-    
-    # Disable dynamic updates on the NAT interface
-    $natAdapter = Get-NetAdapter -Name "Ethernet"
-    if ($natAdapter) {
-        Set-DnsClient -InterfaceIndex $natAdapter.ifIndex -RegisterThisConnectionsAddress $false
-        Write-Host " [OK] NAT interface DNS registration disabled" -ForegroundColor Green
+    # Bind DNS Server to specific IP (idempotent: skip if already set)
+    $dnsParamsKey = 'HKLM:\SYSTEM\CurrentControlSet\Services\DNS\Parameters'
+    $currentListen = (Get-ItemProperty -Path $dnsParamsKey -Name 'ListenAddresses' -ErrorAction SilentlyContinue).ListenAddresses
+    if ($currentListen -and ($currentListen -is [array]) -and ($currentListen.Count -eq 1) -and ($currentListen[0] -eq $ip)) {
+        Write-Host " [SKIP] DNS already bound to $ip" -ForegroundColor DarkGray
+    } else {
+        Set-ItemProperty -Path $dnsParamsKey -Name 'ListenAddresses' -Value ([string[]]@($ip))
+        Write-Host " [OK] DNS bound to $ip" -ForegroundColor Green
     }
     
-    # Enable dynamic updates on the domain interface
-    $domainAdapter = Get-NetAdapter -Name "Ethernet 2"
+    # Disable dynamic updates on the NAT interface (idempotent)
+    $natAdapter = Get-NetAdapter -Name "Ethernet" -ErrorAction SilentlyContinue
+    if ($natAdapter) {
+        $natDns = Get-DnsClient -InterfaceIndex $natAdapter.ifIndex
+        if ($natDns.RegisterThisConnectionsAddress -eq $false) {
+            Write-Host " [SKIP] NAT interface DNS registration already disabled" -ForegroundColor DarkGray
+        } else {
+            Set-DnsClient -InterfaceIndex $natAdapter.ifIndex -RegisterThisConnectionsAddress $false
+            Write-Host " [OK] NAT interface DNS registration disabled" -ForegroundColor Green
+        }
+    }
+
+    # Enable dynamic updates on the domain interface (idempotent)
+    $domainAdapter = Get-NetAdapter -Name "Ethernet 2" -ErrorAction SilentlyContinue
     if ($domainAdapter) {
-        Set-DnsClient -InterfaceIndex $domainAdapter.ifIndex -RegisterThisConnectionsAddress $true
-        Write-Host " [OK] Domain interface DNS registration enabled" -ForegroundColor Green
+        $domDns = Get-DnsClient -InterfaceIndex $domainAdapter.ifIndex
+        if ($domDns.RegisterThisConnectionsAddress -eq $true) {
+            Write-Host " [SKIP] Domain interface DNS registration already enabled" -ForegroundColor DarkGray
+        } else {
+            Set-DnsClient -InterfaceIndex $domainAdapter.ifIndex -RegisterThisConnectionsAddress $true
+            Write-Host " [OK] Domain interface DNS registration enabled" -ForegroundColor Green
+        }
     }
 }
 
