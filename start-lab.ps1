@@ -73,12 +73,17 @@ Write-Host "  Vagrant : $(vagrant --version)"
 
 $vboxCmd  = Get-Command VBoxManage -ErrorAction SilentlyContinue
 $vboxPath = $null
-if ($vboxCmd) { $vboxPath = $vboxCmd.Source }
+if ($vboxCmd) {
+    $vboxPath = $vboxCmd.Source
+} else {
+    $vboxFallback = Join-Path $env:ProgramFiles "Oracle\VirtualBox\VBoxManage.exe"
+    if (Test-Path $vboxFallback) { $vboxPath = $vboxFallback }
+}
 if (-not $vboxPath) {
     Write-Host "[!] VirtualBox (VBoxManage) not found. Install from https://www.virtualbox.org/" -ForegroundColor Red
     exit 1
 }
-Write-Host "  VBox    : $(VBoxManage --version)"
+Write-Host "  VBox    : $(& $vboxPath --version)"
 
 # ----------------------------------------------------------------
 # 2. Install required Vagrant plugins
