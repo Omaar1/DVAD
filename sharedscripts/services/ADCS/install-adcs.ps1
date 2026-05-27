@@ -1,11 +1,12 @@
-# param(
-#     [string]$domainVariables
-# )
-
-# $domain = Get-Content -Raw -Path "C:\vagrant\provision\variables\forest-variables.json" | ConvertFrom-Json
-# $securePassword = ConvertTo-SecureString $domain.administratorPassword -AsPlainText -Force
-# $username = $domain.netbiosName + "\Administrator" 
-# $domainAdminCredentials = New-Object System.Management.Automation.PSCredential($username, $securePassword)
+# Build domain admin credential. Required because this script runs over WinRM
+# as the local vagrant admin; installing an Enterprise Root CA writes into
+# CN=Public Key Services,CN=Services,CN=Configuration,... and needs Enterprise
+# Admins. Without -Credential, the cmdlet fails at set_CAType with
+# 0x80072082 ERROR_DS_RANGE_CONSTRAINT (the DC rejects the operation).
+$forest = Get-Content -Raw -Path "C:\vagrant\provision\variables\forest-variables.json" | ConvertFrom-Json
+$securePassword = ConvertTo-SecureString $forest.administratorPassword -AsPlainText -Force
+$username = $forest.netbiosName + "\Administrator"
+$domainAdminCredentials = New-Object System.Management.Automation.PSCredential($username, $securePassword)
 
 
 Write-Host "[*] Installing ADCS with Certification Authority and Web Enrollment features......\n\n"
@@ -26,22 +27,37 @@ if ($service -and $service.Status -eq 'Running') {
 
 }else {
     Write-Host "[*] Configuring ADCS as Enterprise Root CA..."
-    # Specify every parameter explicitly. The bare default form
-    # (Install-AdcsCertificationAuthority -CAType EnterpriseRootCA -Force)
-    # fails on Server 2019 with 0x80072082 ERROR_DS_RANGE_CONSTRAINT because
-    # one of the auto-computed defaults (CN, hash, key) trips AD schema validation.
+    # Pass -Credential so the cmdlet writes the CA config into AD as a domain admin,
+    # not as the local vagrant WinRM identity (which lacks Enterprise Admin rights).
     $caCommonName = "$env:COMPUTERNAME-CA"
-    Install-AdcsCertificationAuthority `
-        -CAType EnterpriseRootCA `
-        -CACommonName $caCommonName `
-        -CryptoProviderName "RSA#Microsoft Software Key Storage Provider" `
-        -KeyLength 2048 `
-        -HashAlgorithmName SHA256 `
-        -ValidityPeriod Years `
-        -ValidityPeriodUnits 10 `
-        -DatabaseDirectory "$env:SystemRoot\System32\CertLog" `
-        -LogDirectory "$env:SystemRoot\System32\CertLog" `
-        -Force
+    try {
+        Install-AdcsCertificationAuthority `
+            -CAType EnterpriseRootCA `
+            -Credential $domainAdminCredentials `
+            -CACommonName $caCommonName `
+            -CryptoProviderName "RSA#Microsoft Software Key Storage Provider" `
+            -KeyLength 2048 `
+            -HashAlgorithmName SHA256 `
+            -ValidityPeriod Years `
+            -ValidityPeriodUnits 10 `
+            -DatabaseDirectory "$env:SystemRoot\System32\CertLog" `
+            -LogDirectory "$env:SystemRoot\System32\CertLog" `
+            -OverwriteExistingKey `
+            -Force `
+            -ErrorAction Stop
+    }
+    catch {
+        Write-Host "[!] Install-AdcsCertificationAuthority failed: $_" -ForegroundColor Red
+        $certocm = "$env:SystemRoot\certocm.log"
+        if (Test-Path $certocm) {
+            Write-Host "----- certocm.log (last 80 lines) -----" -ForegroundColor Yellow
+            Get-Content $certocm -Tail 80 | ForEach-Object { Write-Host $_ }
+            Write-Host "----- end certocm.log -----" -ForegroundColor Yellow
+        } else {
+            Write-Host "[!] $certocm not found" -ForegroundColor Yellow
+        }
+        throw
+    }
 }
 
 
@@ -55,7 +71,7 @@ Write-Host "#### Step 2:install Web Enrollment ######"
 if (-not (Get-WindowsFeature ADCS-Web-Enrollment).Installed) {
     Write-Host "[*] Installing Web Enrollment..."
     Install-WindowsFeature ADCS-Web-Enrollment -IncludeManagementTools
-    Install-AdcsWebEnrollment   -Force
+    Install-AdcsWebEnrollment -Credential $domainAdminCredentials -Force
 } else {
     Write-Host "[*] Web Enrollment is already installed."
 }
