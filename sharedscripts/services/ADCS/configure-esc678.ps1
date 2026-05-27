@@ -163,7 +163,7 @@ try {
     Set-WebConfigurationProperty `
         -Filter "/system.webServer/security/access" `
         -Name "sslFlags" -Value "None" -PSPath "IIS:\Sites\Default Web Site\certsrv" -ErrorAction SilentlyContinue
-    Write-Host "[+] SSL requirement removed — HTTP access to /certsrv/ enabled." -ForegroundColor Green
+    Write-Host "[+] SSL requirement removed - HTTP access to /certsrv/ enabled." -ForegroundColor Green
 
 } catch {
     Write-Host "[!] ESC8 configuration failed: $_" -ForegroundColor Red
