@@ -20,12 +20,22 @@ if (-not (Get-WindowsFeature Adcs-Cert-Authority).Installed ) {
     Write-Host "[*] ADCS features are already installed."
 }
 
-# Configure ADCS as Enterprise Root CA if not already configured
-$service = Get-Service -Name CertSvc -ErrorAction SilentlyContinue
-if ($service -and $service.Status -eq 'Running') {
-    Write-Host "ADCS is installed and running." -ForegroundColor Green
-
-}else {
+# Configure ADCS as Enterprise Root CA if not already configured.
+# Service state is not a reliable signal right after a reboot (CertSvc may be
+# StartPending or Stopped even though the role is fully configured). Check the
+# registry's "Active" value under CertSvc\Configuration, which is set only after
+# Install-AdcsCertificationAuthority has run to completion.
+$caConfigKey = "HKLM:\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration"
+$activeCA = $null
+try { $activeCA = Get-ItemPropertyValue -Path $caConfigKey -Name "Active" -ErrorAction Stop } catch { }
+if ($activeCA) {
+    Write-Host "[*] CA already configured (Active='$activeCA'). Skipping configuration." -ForegroundColor Green
+    $svc = Get-Service -Name CertSvc -ErrorAction SilentlyContinue
+    if ($svc -and $svc.Status -ne 'Running') {
+        Write-Host "[*] Starting CertSvc..."
+        Start-Service CertSvc
+    }
+} else {
     Write-Host "[*] Configuring ADCS as Enterprise Root CA..."
     # Pass -Credential so the cmdlet writes the CA config into AD as a domain admin,
     # not as the local vagrant WinRM identity (which lacks Enterprise Admin rights).
