@@ -23,10 +23,25 @@ if (-not (Get-WindowsFeature Adcs-Cert-Authority).Installed ) {
 $service = Get-Service -Name CertSvc -ErrorAction SilentlyContinue
 if ($service -and $service.Status -eq 'Running') {
     Write-Host "ADCS is installed and running." -ForegroundColor Green
-    
+
 }else {
     Write-Host "[*] Configuring ADCS as Enterprise Root CA..."
-    Install-AdcsCertificationAuthority -CAType EnterpriseRootCA -Force
+    # Specify every parameter explicitly. The bare default form
+    # (Install-AdcsCertificationAuthority -CAType EnterpriseRootCA -Force)
+    # fails on Server 2019 with 0x80072082 ERROR_DS_RANGE_CONSTRAINT because
+    # one of the auto-computed defaults (CN, hash, key) trips AD schema validation.
+    $caCommonName = "$env:COMPUTERNAME-CA"
+    Install-AdcsCertificationAuthority `
+        -CAType EnterpriseRootCA `
+        -CACommonName $caCommonName `
+        -CryptoProviderName "RSA#Microsoft Software Key Storage Provider" `
+        -KeyLength 2048 `
+        -HashAlgorithmName SHA256 `
+        -ValidityPeriod Years `
+        -ValidityPeriodUnits 10 `
+        -DatabaseDirectory "$env:SystemRoot\System32\CertLog" `
+        -LogDirectory "$env:SystemRoot\System32\CertLog" `
+        -Force
 }
 
 
