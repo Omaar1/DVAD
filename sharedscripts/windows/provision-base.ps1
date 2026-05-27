@@ -32,11 +32,18 @@ Set-Culture $zone
 & $env:windir\system32\tzutil /s "GMT Standard Time"
 
 
-# disable both firewalls ! 
+# disable both firewalls !
 Set-NetFirewallProfile -Profile Domain, Public, Private -Enabled False
 
+# Detect NICs by ifIndex order. Vagrant attaches NAT first, private_network second.
+$nics = Get-NetAdapter | Where-Object Status -ne 'Disabled' | Sort-Object ifIndex
+$natName    = $nics[0].Name
+$domainName = $nics[1].Name
+Write-Host "NAT adapter: $natName"
+Write-Host "Domain adapter: $domainName"
+
 ## enabale NAT adapter on startUp
-schtasks /create /f /tn "enable NAT adapter" /sc onstart /delay 0000:30 /rl highest /ru system /tr "powershell.exe netsh interface set interface 'Ethernet' enable"
+schtasks /create /f /tn "enable NAT adapter" /sc onstart /delay 0000:30 /rl highest /ru system /tr "powershell.exe netsh interface set interface '$natName' enable"
 
 # Disable password expiry
 net accounts /maxpwage:unlimited
@@ -46,8 +53,8 @@ net accounts /maxpwage:unlimited
 Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name DisablePasswordChange -Value 1
 
 # Add networ metrics very important !!  !!!!!!!!!!!!!!!!!!!
-Set-NetIPInterface -InterfaceAlias "Ethernet 2" -InterfaceMetric 5
-Set-NetIPInterface -InterfaceAlias "Ethernet" -InterfaceMetric 55
+Set-NetIPInterface -InterfaceAlias $domainName -InterfaceMetric 5
+Set-NetIPInterface -InterfaceAlias $natName    -InterfaceMetric 55
 
 # Configure network adapters for optimal DNS and domain operation
 # Disable IPv6 on all interfaces
@@ -55,14 +62,14 @@ Get-NetAdapter | ForEach-Object {
     Set-NetAdapterBinding -InterfaceAlias $_.Name -ComponentID 'ms_tcpip6' -Enabled $false
 }
 
-# Disable dynamic DNS registration on NAT interface (Ethernet)
-$natAdapter = Get-NetAdapter -Name "Ethernet"
+# Disable dynamic DNS registration on NAT interface
+$natAdapter = Get-NetAdapter -Name $natName
 if ($natAdapter) {
     Set-DnsClient -InterfaceIndex $natAdapter.ifIndex -RegisterThisConnectionsAddress $false
 }
 
-# Enable DNS registration on domain interface (Ethernet 2)
-$domainAdapter = Get-NetAdapter -Name "Ethernet 2"
+# Enable DNS registration on domain interface
+$domainAdapter = Get-NetAdapter -Name $domainName
 if ($domainAdapter) {
     Set-DnsClient -InterfaceIndex $domainAdapter.ifIndex -RegisterThisConnectionsAddress $true
 }

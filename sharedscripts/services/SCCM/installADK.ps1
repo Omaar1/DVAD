@@ -12,15 +12,19 @@ Import-Module "$PSScriptRoot\PhaseTimer.psm1" -Force
 # --- PART 1: NETWORK SETUP (GO ONLINE) ---
 Start-PhaseTimer -PhaseName "CONFIGURING NETWORK FOR INTERNET"
 
-# 1. Configure DNS on NAT Adapter (Ethernet)
+# Detect NICs by ifIndex order. Vagrant attaches NAT first, private_network second.
+$nics = Get-NetAdapter | Where-Object Status -ne 'Disabled' | Sort-Object ifIndex
+$natName = $nics[0].Name
+
+# 1. Configure DNS on NAT Adapter
 # We force Google DNS (8.8.8.8) to resolve external downloads
 try {
-    Write-Host "Setting Public DNS on 'Ethernet'..." -NoNewline
-    Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses ("8.8.8.8", "8.8.4.4") -ErrorAction SilentlyContinue
+    Write-Host "Setting Public DNS on '$natName'..." -NoNewline
+    Set-DnsClientServerAddress -InterfaceAlias $natName -ServerAddresses ("8.8.8.8", "8.8.4.4") -ErrorAction SilentlyContinue
     Write-Host "Done." -ForegroundColor Green
 }
 catch {
-    Write-Warning "Could not set DNS. Ensure adapter name is 'Ethernet'."
+    Write-Warning "Could not set DNS on '$natName'."
 }
 
 # 2. Enable Windows Update Service (Required for Installs)

@@ -21,13 +21,18 @@ $domain = Get-Content -Raw -Path "C:\vagrant\provision\variables\domain-variable
 # ==============================================================================
 Start-PhaseTimer -PhaseName "NETWORK ADAPTER CONFIGURATION"
 
+# Detect NICs by ifIndex order. Vagrant attaches NAT first, private_network second.
+$nics = Get-NetAdapter | Where-Object Status -ne 'Disabled' | Sort-Object ifIndex
+$natName    = $nics[0].Name
+$domainName = $nics[1].Name
+
 # Configure network adapter for optimal DNS operation
-$ip = (Get-NetAdapter -Name "Ethernet 2" | Get-NetIPAddress | Where-Object { $_.AddressFamily -eq 'IPv4' }).IPAddress
+$ip = (Get-NetAdapter -Name $domainName | Get-NetIPAddress | Where-Object { $_.AddressFamily -eq 'IPv4' }).IPAddress
 Write-Host " [INFO] IP Address: $ip" -ForegroundColor Yellow
 
 # Disable IPv6 on the domain interface
-Set-NetAdapterBinding -InterfaceAlias "Ethernet 2" -ComponentID 'ms_tcpip6' -Enabled $false
-Write-Host " [OK] IPv6 disabled on Ethernet 2" -ForegroundColor Green
+Set-NetAdapterBinding -InterfaceAlias $domainName -ComponentID 'ms_tcpip6' -Enabled $false
+Write-Host " [OK] IPv6 disabled on $domainName" -ForegroundColor Green
 
 # Configure DNS client settings
 $adapter = Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object { $_.IPAddress -contains $ip }
@@ -86,7 +91,7 @@ if (Get-WindowsFeature -Name DNS | Where-Object { $_.Installed -eq $true }) {
     }
     
     # Disable dynamic updates on the NAT interface (idempotent)
-    $natAdapter = Get-NetAdapter -Name "Ethernet" -ErrorAction SilentlyContinue
+    $natAdapter = Get-NetAdapter -Name $natName -ErrorAction SilentlyContinue
     if ($natAdapter) {
         $natDns = Get-DnsClient -InterfaceIndex $natAdapter.ifIndex
         if ($natDns.RegisterThisConnectionsAddress -eq $false) {
@@ -98,7 +103,7 @@ if (Get-WindowsFeature -Name DNS | Where-Object { $_.Installed -eq $true }) {
     }
 
     # Enable dynamic updates on the domain interface (idempotent)
-    $domainAdapter = Get-NetAdapter -Name "Ethernet 2" -ErrorAction SilentlyContinue
+    $domainAdapter = Get-NetAdapter -Name $domainName -ErrorAction SilentlyContinue
     if ($domainAdapter) {
         $domDns = Get-DnsClient -InterfaceIndex $domainAdapter.ifIndex
         if ($domDns.RegisterThisConnectionsAddress -eq $true) {

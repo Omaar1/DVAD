@@ -1,7 +1,11 @@
 #DNS updates for DC
-Import-Module DnsServer  
+Import-Module DnsServer
 
-$ip = (Get-NetAdapter -Name "Ethernet 2" | Get-NetIPAddress | Where-Object { $_.AddressFamily -eq 'IPv4' }).IPAddress
+# Detect NICs by ifIndex order. Vagrant attaches NAT first, private_network second.
+$nics = Get-NetAdapter | Where-Object Status -ne 'Disabled' | Sort-Object ifIndex
+$domainName = $nics[1].Name
+
+$ip = (Get-NetAdapter -Name $domainName | Get-NetIPAddress | Where-Object { $_.AddressFamily -eq 'IPv4' }).IPAddress
 $firstOctet = $ip.split(".")[0]
 $secondOctet = $ip.split(".")[1]
 $thirdOctet = $ip.split(".")[2]
@@ -64,7 +68,7 @@ foreach ($record in $srvRecords) {
 # Configure DNS forwarder to use Root DC
 Set-DnsServerForwarder -IPAddress $rootdcip -ErrorAction SilentlyContinue
 
-$index = Get-NetAdapter -Name 'Ethernet*' | Select-Object -ExpandProperty 'ifIndex'
+$index = ($nics | Select-Object -ExpandProperty 'ifIndex')
 Set-DnsClientServerAddress -InterfaceIndex $index -ServerAddresses @($dnsip, $rootdcip)  # Set both DNS servers
 
 # Restart DNS Server to apply changes

@@ -6,11 +6,16 @@ param(
 $domain = Get-Content -Raw -Path "C:\vagrant\provision\variables\domain-variables.json" | ConvertFrom-Json
 $parent = Get-Content -Raw -Path "C:\vagrant\provision\variables\forest-variables.json" | ConvertFrom-Json
 
+# Detect NICs by ifIndex order. Vagrant attaches NAT first, private_network second.
+$nics = Get-NetAdapter | Where-Object Status -ne 'Disabled' | Sort-Object ifIndex
+$natName    = $nics[0].Name
+$domainName = $nics[1].Name
+
 # Configure network adapter for optimal DNS operation
-$ip = (Get-NetAdapter -Name "Ethernet 2" | Get-NetIPAddress | Where-Object { $_.AddressFamily -eq 'IPv4' }).IPAddress
+$ip = (Get-NetAdapter -Name $domainName | Get-NetIPAddress | Where-Object { $_.AddressFamily -eq 'IPv4' }).IPAddress
 
 # Disable IPv6 on the domain interface
-Set-NetAdapterBinding -InterfaceAlias "Ethernet 2" -ComponentID 'ms_tcpip6' -Enabled $false
+Set-NetAdapterBinding -InterfaceAlias $domainName -ComponentID 'ms_tcpip6' -Enabled $false
 
 echo ' ############### Configure DNS properly ###############'
 # Configure DNS to point to parent DC
@@ -31,13 +36,13 @@ if (Get-WindowsFeature -Name DNS | Where-Object { $_.Installed -eq $true }) {
     Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\DNS\Parameters' -Name 'ListenAddresses' -Value @($ip)
     
     # Disable dynamic updates on the NAT interface
-    $natAdapter = Get-NetAdapter -Name "Ethernet"
+    $natAdapter = Get-NetAdapter -Name $natName
     if ($natAdapter) {
         Set-DnsClient -InterfaceIndex $natAdapter.ifIndex -RegisterThisConnectionsAddress $false
     }
-    
+
     # Enable dynamic updates on the domain interface
-    $domainAdapter = Get-NetAdapter -Name "Ethernet 2"
+    $domainAdapter = Get-NetAdapter -Name $domainName
     if ($domainAdapter) {
         Set-DnsClient -InterfaceIndex $domainAdapter.ifIndex -RegisterThisConnectionsAddress $true
     }

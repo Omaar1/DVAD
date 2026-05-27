@@ -1,8 +1,12 @@
 #DNS Setup on ROOT DC
 Import-Module DnsServer
 
+# Detect NICs by ifIndex order. Vagrant attaches NAT first, private_network second.
+$nics = Get-NetAdapter | Where-Object Status -ne 'Disabled' | Sort-Object ifIndex
+$domainName = $nics[1].Name
+
 # Get IP from domain interface
-$ip = (Get-NetAdapter -Name "Ethernet 2" | Get-NetIPAddress | Where-Object { $_.AddressFamily -eq 'IPv4' }).IPAddress
+$ip = (Get-NetAdapter -Name $domainName | Get-NetIPAddress | Where-Object { $_.AddressFamily -eq 'IPv4' }).IPAddress
 $firstOctet = $ip.split(".")[0]
 $secondOctet = $ip.split(".")[1]
 $thirdOctet = $ip.split(".")[2]
