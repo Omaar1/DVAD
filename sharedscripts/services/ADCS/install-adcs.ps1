@@ -53,6 +53,7 @@ if ($activeCA) {
             -DatabaseDirectory "$env:SystemRoot\System32\CertLog" `
             -LogDirectory "$env:SystemRoot\System32\CertLog" `
             -OverwriteExistingKey `
+            -OverwriteExistingCAinDS `
             -Force `
             -ErrorAction Stop
     }
