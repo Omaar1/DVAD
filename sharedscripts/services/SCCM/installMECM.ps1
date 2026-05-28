@@ -10,6 +10,20 @@ $ErrorActionPreference = "Stop"
 # Import Phase Timer Module (Ensure this file is clean!)
 Import-Module "$PSScriptRoot\PhaseTimer.psm1" -Force
 
+# Preserve ConfigMgrSetup.log to the host-visible share and print its tail so failures are diagnosable.
+function Save-SetupLog {
+    param([string]$LogFile, [string]$ShareRoot)
+    if (-not (Test-Path $LogFile)) {
+        Write-Host " [WARN] $LogFile not found - setup may not have started." -ForegroundColor Yellow
+        return
+    }
+    $SavedLog = "$ShareRoot\ConfigMgrSetup-FAILED-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+    Copy-Item -Path $LogFile -Destination $SavedLog -Force -ErrorAction SilentlyContinue
+    Write-Host "`n--- ConfigMgrSetup.log (last 50 lines) ---" -ForegroundColor Yellow
+    Get-Content -Path $LogFile -Tail 50 -ErrorAction SilentlyContinue | Write-Host
+    Write-Host "--- end log (full copy saved to $SavedLog) ---" -ForegroundColor Yellow
+}
+
 # --- CONFIGURATION ---
 $SiteCode = "PS1"
 $SiteName = "LabPrimary"
@@ -213,10 +227,12 @@ try {
     $FailureRegex = "Setup has encountered a fatal error|Setup failed|Failed Configuration Manager Server Setup"
     
     $LastLogLine = ""
-    
+    $SetupOutcome = "Unknown"
+
     while ($true) {
         if ($Process.HasExited) {
             Write-Host "`nSetup process exited." -ForegroundColor Yellow
+            $SetupOutcome = "Exited"
             break
         }
         
@@ -227,10 +243,12 @@ try {
         # Check Success/Failure
         if ($CurrentContent -match $SuccessRegex) {
             Write-Host "`nSUCCESS: Installation Completed Successfully!" -ForegroundColor Green
+            $SetupOutcome = "Success"
             break
         }
         if ($CurrentContent -match $FailureRegex) {
             Write-Host "`nFAILURE: Setup encountered an error. Check logs." -ForegroundColor Red
+            $SetupOutcome = "Failure"
             break
         }
         
@@ -249,27 +267,51 @@ try {
         
         Start-Sleep -Seconds 60
     }
-    
+
+    # --- Resolve the true outcome. Markers can scroll past the 5-line tail, so scan the full log. ---
+    $FullLog = Get-Content -Path $LogFile -ErrorAction SilentlyContinue
+    if ($SetupOutcome -ne "Success") {
+        if ($FullLog -match $SuccessRegex) { $SetupOutcome = "Success" }
+        elseif ($FullLog -match $FailureRegex) { $SetupOutcome = "Failure" }
+    }
+
+    if ($SetupOutcome -ne "Success") {
+        Save-SetupLog -LogFile $LogFile -ShareRoot $ShareRoot
+        Stop-PhaseTimer -Status Failed
+        Write-Host "MECM Setup did not complete successfully (outcome: $SetupOutcome)." -ForegroundColor Red
+        exit 1
+    }
+
     Stop-PhaseTimer -Status Success
-    
+
     # --- STEP 4: VERIFY INSTALLATION ---
     Start-PhaseTimer -PhaseName "VERIFYING INSTALLATION"
 
     $VerificationFailed = $false
+    $Services = "SMS_EXECUTIVE", "SMS_SITE_COMPONENT_MANAGER"
+
+    # Site services can take a minute or two to register after core setup completes - give a grace period.
+    Write-Host "Waiting for site services to register..." -ForegroundColor Gray
+    $SvcWait = 0
+    while ($SvcWait -lt 180) {
+        $exec = Get-Service -Name "SMS_EXECUTIVE" -ErrorAction SilentlyContinue
+        if ($exec -and $exec.Status -eq 'Running') { break }
+        Start-Sleep -Seconds 10
+        $SvcWait += 10
+    }
 
     # 1. Check Services
-    $Services = "SMS_EXECUTIVE", "SMS_SITE_COMPONENT_MANAGER"
     foreach ($Svc in $Services) {
         $Status = Get-Service -Name $Svc -ErrorAction SilentlyContinue
         if ($Status -and $Status.Status -eq 'Running') {
             Write-Host " [OK] Service '$Svc' is Running." -ForegroundColor Green
         }
         elseif ($Status) {
-            Write-Error " [FAIL] Service '$Svc' exists but is $($Status.Status)."
+            Write-Host " [FAIL] Service '$Svc' exists but is $($Status.Status)." -ForegroundColor Red
             $VerificationFailed = $true
         }
         else {
-            Write-Error " [FAIL] Service '$Svc' not found."
+            Write-Host " [FAIL] Service '$Svc' not found." -ForegroundColor Red
             $VerificationFailed = $true
         }
     }
@@ -279,22 +321,20 @@ try {
         Write-Host " [OK] SMS Registry Keys exist." -ForegroundColor Green
     }
     else {
-        Write-Error " [FAIL] Missing SMS Registry Keys."
+        Write-Host " [FAIL] Missing SMS Registry Keys." -ForegroundColor Red
         $VerificationFailed = $true
     }
 
     if ($VerificationFailed) {
+        Save-SetupLog -LogFile $LogFile -ShareRoot $ShareRoot
         Stop-PhaseTimer -Status Failed
-        Write-Error "CRITICAL: Installation Verification FAILED."
-        # DO NOT throw here; just exit with a non-zero code
+        Write-Host "CRITICAL: Installation Verification FAILED." -ForegroundColor Red
         exit 1
     }
     else {
         Write-Host "Installation Verification PASSED. MECM is ready." -ForegroundColor Green
         Stop-PhaseTimer -Status Success
     }
-
-
 }
 catch {
     Stop-PhaseTimer -Status Failed
