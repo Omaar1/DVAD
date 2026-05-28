@@ -87,12 +87,39 @@ Stop-PhaseTimer -Status Success
 # --- STEP 2: INSTALLATION --- (rest unchanged from original)
 Start-PhaseTimer -PhaseName "INSTALLING SQL SERVER"
 
-if (Get-Service $InstanceName -ErrorAction SilentlyContinue) {
-    Write-Host "[SKIP] SQL Server is already installed." -ForegroundColor Green
+$NeedInstall = $true
+$ExistingSvc = Get-Service $InstanceName -ErrorAction SilentlyContinue
+
+if ($ExistingSvc) {
+    if ($ExistingSvc.Status -eq 'Running') {
+        Write-Host "[SKIP] SQL Server is already installed and running." -ForegroundColor Green
+        $NeedInstall = $false
+    }
+    else {
+        # Service is registered but not running. A prior provisioning run may have
+        # halted mid-build, leaving a broken instance. Verify it can actually start;
+        # if not, tear it down and reinstall cleanly.
+        Write-Host "[CHECK] SQL service exists but is $($ExistingSvc.Status). Verifying it can start..." -ForegroundColor Yellow
+        try {
+            Start-Service $InstanceName -ErrorAction Stop
+            Write-Host "[SKIP] Existing SQL Server started - install is healthy." -ForegroundColor Green
+            $NeedInstall = $false
+        }
+        catch {
+            Write-Host "[REPAIR] Existing SQL service will not start: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "[REPAIR] Treating as a broken install. Uninstalling before clean reinstall..." -ForegroundColor Yellow
+            $UninstallArgs = @("/Q", "/ACTION=Uninstall", "/FEATURES=SQLEngine", "/INSTANCENAME=$InstanceName")
+            $UninProc = Start-Process -FilePath $InstallCommand -ArgumentList $UninstallArgs -Wait -PassThru
+            Write-Host "   Uninstall finished (Exit Code: $($UninProc.ExitCode))." -ForegroundColor Gray
+        }
+    }
+}
+
+if (-not $NeedInstall) {
     Stop-PhaseTimer -Status Success
 }
 else {
-    Write-Host "Starting Installer in Background..." 
+    Write-Host "Starting Installer in Background..."
 
     $Arguments = @(
         "/Q", "/ACTION=Install", "/IACCEPTSQLSERVERLICENSETERMS",
@@ -160,9 +187,16 @@ Start-PhaseTimer -PhaseName "SQL SERVER CONFIGURATION"
 
 # Force Start Service
 $MaxRetries = 5
+$LastStartError = $null
 for ($i = 0; $i -lt $MaxRetries; $i++) {
     if ((Get-Service $InstanceName -ErrorAction SilentlyContinue).Status -eq 'Running') { break }
-    Start-Service $InstanceName -ErrorAction SilentlyContinue
+    try {
+        Start-Service $InstanceName -ErrorAction Stop
+    }
+    catch {
+        $LastStartError = $_.Exception.Message
+        Write-Host "   [RETRY $($i+1)/$MaxRetries] Start failed: $LastStartError" -ForegroundColor Yellow
+    }
     Start-Sleep -Seconds 5
 }
 
@@ -179,7 +213,22 @@ if ($Service.Status -eq "Running") {
     Write-Host "[OK] Service $InstanceName is Running." -ForegroundColor Green
 }
 else {
-    Write-Error "[FAIL] Service $InstanceName is $($Service.Status)."
+    Write-Host "[FAIL] Service $InstanceName is $($Service.Status)." -ForegroundColor Red
+    if ($LastStartError) { Write-Host " Last start error: $LastStartError" -ForegroundColor Red }
+
+    # Dump the SQL ERRORLOG so we can see WHY the engine refuses to start
+    $ErrorLog = Get-ChildItem -Path "C:\Program Files\Microsoft SQL Server" -Recurse -Filter "ERRORLOG" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($ErrorLog) {
+        Write-Host "`n--- SQL ERRORLOG ($($ErrorLog.FullName)) last 40 lines ---" -ForegroundColor Yellow
+        Get-Content -Path $ErrorLog.FullName -Tail 40 | Write-Host
+        Write-Host "--- end ERRORLOG ---" -ForegroundColor Yellow
+    }
+    else {
+        Write-Host " No ERRORLOG found - the install likely never completed; the service is registered but the instance was not fully provisioned." -ForegroundColor Yellow
+    }
+
+    Stop-PhaseTimer -Status Failed
     exit 1
 }
 
