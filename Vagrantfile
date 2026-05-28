@@ -47,12 +47,13 @@ Vagrant.configure("2") do |cfg|
       config.winrm.retry_limit = 30
       config.winrm.retry_delay = 10
       
-      config.vm.provider :vmware_desktop do |v, override|
-        v.vmx["displayName"] = rootdc_name
+      config.vm.provider :virtualbox do |v, override|
+        v.name = rootdc_name
         v.linked_clone = true
         v.gui = false
         v.cpus = 2
         v.memory = 2048
+        v.customize ["modifyvm", :id, "--vram", 64]
       end
 
       config.vm.network :private_network,
@@ -100,12 +101,13 @@ Vagrant.configure("2") do |cfg|
       config.winrm.retry_limit = 30
       config.winrm.retry_delay = 10
       
-      config.vm.provider :vmware_desktop do |v, override|
-        v.vmx["displayName"] = ADCS_name
+      config.vm.provider :virtualbox do |v, override|
+        v.name = ADCS_name
         v.linked_clone = true  # saves ~30 GB disk per VM vs full clone
         v.gui = false
         v.cpus = 2
         v.memory = 2048
+        v.customize ["modifyvm", :id, "--vram", 64]
       end
       
       config.vm.network :private_network,
@@ -150,12 +152,13 @@ Vagrant.configure("2") do |cfg|
       config.winrm.retry_limit = 30
       config.winrm.retry_delay = 10
       
-      config.vm.provider :vmware_desktop do |v, override|
-        v.vmx["displayName"] = SCCM_name
+      config.vm.provider :virtualbox do |v, override|
+        v.name = SCCM_name
         v.linked_clone = true
         v.gui = false
         v.cpus = 2
         v.memory = 8192
+        v.customize ["modifyvm", :id, "--vram", 64]
       end
       
       config.vm.network :private_network,
@@ -357,12 +360,13 @@ Vagrant.configure("2") do |cfg|
       config.winrm.retry_limit = 30
       config.winrm.retry_delay = 10
 
-      config.vm.provider :vmware_desktop do |v, override|
-          v.vmx["displayName"] = server_name
+      config.vm.provider :virtualbox do |v, override|
+          v.name = server_name
           v.linked_clone = true
           v.gui = false
           v.cpus = 2
           v.memory = 2048
+          v.customize ["modifyvm", :id, "--vram", 64]
       end
 
       config.vm.network :private_network,
