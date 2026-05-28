@@ -347,10 +347,20 @@ try {
             if ($osVer -like "6.0.*" -or $osVer -like "6.1.*") { $isLegacy = $true }
         }
 
-        # Enable PXE support on the image itself
+        # Enable PXE support on the image itself.
+        # Use -InputObject (not -Id): the -Id path re-resolves a lightweight object
+        # with an empty ImageOSVersion, which fails the cmdlet's WinPE-version check
+        # and throws a spurious "legacy WinPE 3.1" error on real ADK 10 images.
         if ($EnablePxe -and -not $isLegacy) {
-            Set-CMBootImage -Id $BootImg.PackageID -DeployFromPxeDistributionPoint $true -ErrorAction Stop
+            $fullImg = Get-CMBootImage -Id $BootImg.PackageID
+            Set-CMBootImage -InputObject $fullImg -DeployFromPxeDistributionPoint $true -ErrorAction Stop
             Write-Host " [OK] Set 'DeployFromPxeDistributionPoint' to UPDATE." -ForegroundColor Green
+
+            # Verify the flag actually stuck. If not, the PXE attack vector is down.
+            $chk = Get-CMBootImage -Id $BootImg.PackageID
+            if (-not $chk.DeployFromPxeDistributionPoint) {
+                Write-Warning " [VULN-BROKEN] x64 boot image NOT PXE-served. Attack vector down."
+            }
         }
 
         # Distribute to DP
@@ -378,7 +388,9 @@ try {
 }
 catch {
     Stop-PhaseTimer -Status Failed
-    Write-Error "Phase 4 Failed: $_"
+    # Warning, not Error: wrapper runs ErrorActionPreference=Stop, so Write-Error here
+    # would terminate the run and skip Phases 5-7 (PXE enable, TS deploy, NAA config).
+    Write-Warning "Phase 4 Failed: $_"
 }
 
 # ==============================================================================
