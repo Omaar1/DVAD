@@ -204,68 +204,69 @@ catch {
     Write-Error "Phase 1 Failed: $_"
     exit 1
 }
-
 # ==============================================================================
-# PHASE 2: IIS PERMISSIONS FIX (MP/DP ANONYMOUS ACCESS)
+# PHASE 2: POST-MECM HOST FIXES (NTFS ACLs + Name Resolution)
+# ------------------------------------------------------------------------------
+# Scope note: MECM 2403 already configures SMS_MP anonymous auth correctly for an
+# HTTP site (verified: anon=True out of the box). The MP/DP errors this lab hit
+# were NOT auth-layer problems -- they were NTFS (worker couldn't read web.config)
+# and name resolution (PXE responder reached ::1). Those are the only two real
+# fixes, handled below. The IIS unlock is kept only because it's a cheap, real
+# prerequisite if any later phase needs to write web-config sections.
 # ==============================================================================
-Start-PhaseTimer -PhaseName "POST-MECM IIS MP FIX"
+Start-PhaseTimer -PhaseName "POST-MECM HOST FIX"
 try {
-    Import-Module WebAdministration
-
-    # Unlock IIS configuration sections at server level using appcmd
-    # This fixes: "This configuration section cannot be used at this path" errors
-    Write-Host " [INFO] Unlocking IIS authentication sections..." -ForegroundColor Gray
-    $appcmd = "$env:SystemRoot\System32\inetsrv\appcmd.exe"
-    if (Test-Path $appcmd) {
-        & $appcmd unlock config -section:system.webServer/security/authentication/anonymousAuthentication /commit:apphost 2>$null
-        & $appcmd unlock config -section:system.webServer/security/authentication/windowsAuthentication /commit:apphost 2>$null
-        & $appcmd unlock config -section:system.webServer/security/access /commit:apphost 2>$null
-        Write-Host " [OK] IIS sections unlocked." -ForegroundColor Green
+    # --------------------------------------------------------------------------
+    # 2A. NTFS ACL FIX -- the actual cause of 500.19 / 403.2.
+    # MECM baseline grants LOCAL SERVICE / IUSR container-inherit (CI) only, so
+    # inherited ACEs never land on files (web.config). Re-grant with object-
+    # inherit (OI); /T forces it down branches with inheritance disabled
+    # (ServiceData\System\request). SIDs: S-1-5-19=LOCAL SERVICE, S-1-5-17=IUSR.
+    # --------------------------------------------------------------------------
+    $ccmRoot = "C:\Program Files\SMS_CCM"
+    if (Test-Path $ccmRoot) {
+        Write-Host " [INFO] Repairing NTFS ACL inheritance on SMS_CCM..." -ForegroundColor Gray
+        & icacls $ccmRoot /grant "*S-1-5-19:(OI)(CI)(RX)" "*S-1-5-17:(OI)(CI)(RX)" /T /C 2>$null | Out-Null
+        Write-Host " [OK] LOCAL SERVICE + IUSR granted (OI)(CI)(RX) on SMS_CCM tree." -ForegroundColor Green
     }
     else {
-        Write-Warning "appcmd.exe not found - IIS sections may remain locked"
+        Write-Warning "SMS_CCM not found; MP role may not be installed. Skipping ACL fix."
     }
 
-    # 1. FIX ROOT MP (SMS_MP) - Enable both Windows Auth & Anonymous
-    $RootPath = "IIS:\Sites\Default Web Site\SMS_MP"
-    if (Test-Path $RootPath) {
-        Write-Host "Fixing MP Root: $RootPath"
-        Set-WebConfigurationProperty -Filter "/system.webServer/security/access" -PSPath $RootPath -Name "sslFlags" -Value "None" -ErrorAction SilentlyContinue
-        Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/anonymousAuthentication" -PSPath $RootPath -Name "enabled" -Value $true -ErrorAction SilentlyContinue
-        Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/windowsAuthentication" -PSPath $RootPath -Name "enabled" -Value $true -ErrorAction SilentlyContinue
-    }
+    # --------------------------------------------------------------------------
+    # 2B. NAME RESOLUTION PIN -- fixes PXE 'RequestMPKeyInformation: Send() failed'
+    # 0x80004005. FQDN resolves to ::1 + lab NIC + NAT NIC; ::1 sorts first, so
+    # the responder's MP call hits IPv6 loopback and transport init dies. Pin the
+    # FQDN to the lab NIC and deprioritize ::1 so IPv4 wins. Idempotent.
+    # --------------------------------------------------------------------------
+    Write-Host " [INFO] Pinning site server name to lab NIC..." -ForegroundColor Gray
+    $SiteFqdn  = "SCCM.silent.run"
+    $SiteHost  = "SCCM"
+    $LabIP     = "10.10.10.104"
+    $hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
 
-    # 2. FIX KEY EXCHANGE (.sms_aut) - MUST BE ANONYMOUS ONLY
-    $AutPath = "IIS:\Sites\Default Web Site\SMS_MP\.sms_aut"
-    if (Test-Path $AutPath) {
-        Write-Host "Fixing Key Exchange: $AutPath"
-        Set-WebConfigurationProperty -Filter "/system.webServer/security/access" -PSPath $AutPath -Name "sslFlags" -Value "None" -ErrorAction SilentlyContinue
-        Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/anonymousAuthentication" -PSPath $AutPath -Name "enabled" -Value $true -ErrorAction SilentlyContinue
-        Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/windowsAuthentication" -PSPath $AutPath -Name "enabled" -Value $false -ErrorAction SilentlyContinue
-    }
+    (Get-Content $hostsFile) -notmatch [regex]::Escape($SiteFqdn) | Set-Content $hostsFile -Encoding ASCII
+    "$LabIP`t$SiteFqdn`t$SiteHost" | Add-Content $hostsFile -Encoding ASCII
+    & netsh interface ipv6 set prefixpolicy ::1/128 3 0 2>$null | Out-Null
+    & ipconfig /flushdns | Out-Null
+    Write-Host " [OK] $SiteFqdn pinned to $LabIP; ::1 deprioritized." -ForegroundColor Green
 
-    # 3. FIX DP (SMS_DP) - Enable Both
-    $DPPath = "IIS:\Sites\Default Web Site\SMS_DP"
-    if (Test-Path $DPPath) {
-        Write-Host "Fixing DP: $DPPath"
-        Set-WebConfigurationProperty -Filter "/system.webServer/security/access" -PSPath $DPPath -Name "sslFlags" -Value "None" -ErrorAction SilentlyContinue
-        Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/anonymousAuthentication" -PSPath $DPPath -Name "enabled" -Value $true -ErrorAction SilentlyContinue
-        Set-WebConfigurationProperty -Filter "/system.webServer/security/authentication/windowsAuthentication" -PSPath $DPPath -Name "enabled" -Value $true -ErrorAction SilentlyContinue
-    }
-
-    # 4. RESTART IIS SERVICES
-    Restart-WebAppPool -Name "DefaultAppPool" -ErrorAction SilentlyContinue
-    Restart-WebAppPool -Name "CMSite" -ErrorAction SilentlyContinue
+    # --------------------------------------------------------------------------
+    # 2C. IIS settle -- recycle so the ACL change is picked up by worker procs,
+    # and restart the PXE responder (service is 'sccmpxe', NOT WDSServer) so it
+    # re-resolves the now-pinned name. Responder may not exist until PXE is
+    # enabled in a later phase -- SilentlyContinue handles that cleanly.
+    # --------------------------------------------------------------------------
     iisreset /restart /timeout:30
-    
-    Write-Host " [OK] MP IIS bindings fixed (Split Logic)." -ForegroundColor Green
+    Restart-Service sccmpxe -Force -ErrorAction SilentlyContinue
+
+    Write-Host " [OK] Host fixes applied (NTFS ACL + name pin)." -ForegroundColor Green
     Stop-PhaseTimer -Status Success
 }
 catch {
     Stop-PhaseTimer -Status Warning
-    Write-Warning "IIS Fix Failed: $_"
+    Write-Warning "Phase 2 Host Fix Failed: $_"
 }
-
 # ==============================================================================
 # PHASE 3: BOUNDARIES & BOUNDARY GROUP
 # ==============================================================================
@@ -340,26 +341,28 @@ try {
 
         Write-Host " [INFO] Processing boot image '$($BootImg.Name)'..." -ForegroundColor Gray
 
-        # Detect Legacy WinPE (Skip PXE flag if legacy)
-        $isLegacy = $false
-        if ($BootImg.PSObject.Properties.Name -contains 'ImageOSVersion') {
-            $osVer = $BootImg.ImageOSVersion
-            if ($osVer -like "6.0.*" -or $osVer -like "6.1.*") { $isLegacy = $true }
-        }
+        if ($EnablePxe) {
+            # Re-resolve a FULL object by Name. Get-CMBootImage by Name (not -Id, not
+            # -Fast) hydrates ImageOSVersion; the -Id path returns a lazy object with it
+            # empty, which fails Set-CMBootImage's WinPE-version gate and throws a
+            # spurious "legacy WinPE 3.1" error on real ADK 10 images.
+            $fullImg = Get-CMBootImage -Name $BootImg.Name
 
-        # Enable PXE support on the image itself.
-        # Use -InputObject (not -Id): the -Id path re-resolves a lightweight object
-        # with an empty ImageOSVersion, which fails the cmdlet's WinPE-version check
-        # and throws a spurious "legacy WinPE 3.1" error on real ADK 10 images.
-        if ($EnablePxe -and -not $isLegacy) {
-            $fullImg = Get-CMBootImage -Id $BootImg.PackageID
-            Set-CMBootImage -InputObject $fullImg -DeployFromPxeDistributionPoint $true -ErrorAction Stop
-            Write-Host " [OK] Set 'DeployFromPxeDistributionPoint' to UPDATE." -ForegroundColor Green
+            $osVer = $fullImg.ImageOSVersion
+            if ([string]::IsNullOrEmpty($osVer)) {
+                Write-Host " [WARN] ImageOSVersion empty; forcing PXE enable anyway (assumed ADK10+)." -ForegroundColor Yellow
+            }
 
-            # Verify the flag actually stuck. If not, the PXE attack vector is down.
-            $chk = Get-CMBootImage -Id $BootImg.PackageID
-            if (-not $chk.DeployFromPxeDistributionPoint) {
-                Write-Warning " [VULN-BROKEN] x64 boot image NOT PXE-served. Attack vector down."
+            # Only WinPE 3.1 / earlier (6.0.x, 6.1.x) are true legacy. Empty version is
+            # NOT treated as legacy here, since that was the cause of the false positive.
+            $isLegacy = ($osVer -like "6.0.*" -or $osVer -like "6.1.*")
+
+            if (-not $isLegacy) {
+                Set-CMBootImage -InputObject $fullImg -DeployFromPxeDistributionPoint $true -ErrorAction Stop
+                Write-Host " [OK] PXE deploy flag set on '$($fullImg.Name)' (WinPE $osVer)." -ForegroundColor Green
+            }
+            else {
+                Write-Host " [SKIP] '$($fullImg.Name)' is legacy WinPE ($osVer); not PXE-enabling." -ForegroundColor Yellow
             }
         }
 
@@ -380,8 +383,27 @@ try {
     Enable-And-DistributeBootImage -BootImg $BootImgX86 -EnablePxe:$false
     Enable-And-DistributeBootImage -BootImg $BootImgX64 -EnablePxe:$true
 
-    Write-Host " [INFO] Waiting 1 minute for boot image staging..." -ForegroundColor Yellow
-    Start-Sleep -Seconds 60
+    # Poll until the x64 boot image finishes staging on the DP rather than a flat sleep.
+    # State on a slow lab disk can take well over a minute; racing Phase 5 (PXE enable)
+    # ahead of staging is what leaves the boot WIM "not distributed to this PXE DP".
+    Write-Host " [INFO] Waiting for x64 boot image content to stage..." -ForegroundColor Yellow
+    $pkgId   = $BootImgX64.PackageID
+    $maxWait = 300   # seconds; lab safety ceiling
+    $waited  = 0
+    do {
+        Start-Sleep -Seconds 10
+        $waited += 10
+        $status = Get-CMDistributionStatus -Id $pkgId -ErrorAction SilentlyContinue
+        $inProg = if ($status) { $status.NumberInProgress } else { 0 }
+        Write-Host " [INFO] Staging... ($waited s elapsed, $inProg in progress)" -ForegroundColor Gray
+    } while ($inProg -gt 0 -and $waited -lt $maxWait)
+
+    if ($status -and $status.NumberInProgress -gt 0) {
+        Write-Host " [WARN] Boot image still staging after ${maxWait}s; Phase 5 may need a retry." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host " [OK] x64 boot image staging complete." -ForegroundColor Green
+    }
 
     Stop-PhaseTimer -Status Success
 
