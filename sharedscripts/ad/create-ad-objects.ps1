@@ -17,15 +17,28 @@ param(
 # ** SPN Bit
 # * Group Members
 
-# Required for Win2016 which takes ages to load
-Sleep 300
-
 $domain = Get-Content -Raw -Path "C:\vagrant\provision\variables\${domainVariables}" | ConvertFrom-Json
 
 try {
     Import-Module ActiveDirectory -ErrorAction Stop
 } catch {
     throw "Module ActiveDirectory not Installed"
+}
+
+# Wait for AD Web Services (ADWS, port 9389) to answer instead of a blind sleep.
+# The ActiveDirectory cmdlets need ADWS, which comes up slowly after the forest
+# install + reboot. Poll Get-ADDomain until it responds, with a hard timeout.
+$deadline = (Get-Date).AddMinutes(6)
+while ($true) {
+    try {
+        Get-ADDomain -ErrorAction Stop | Out-Null
+        break
+    } catch {
+        if ((Get-Date) -ge $deadline) {
+            throw "AD Web Services not ready after 6 minutes: $_"
+        }
+        Start-Sleep -Seconds 10
+    }
 }
 
 foreach ($file in $files) {

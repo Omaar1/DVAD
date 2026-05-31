@@ -1,5 +1,10 @@
 {
   "objects": [
+    {"type": "ou", "name": "Employees",   "path": ""},
+    {"type": "ou", "name": "Groups",      "path": ""},
+    {"type": "ou", "name": "IT",          "path": "OU=Employees,"},
+    {"type": "ou", "name": "Sales",       "path": "OU=Employees,"},
+    {"type": "ou", "name": "Marketing",   "path": "OU=Employees,"},
     {"type": "ou", "name": "HR",          "path": "OU=Employees,"},
     {"type": "ou", "name": "Finance",     "path": "OU=Employees,"},
     {"type": "ou", "name": "Engineering", "path": "OU=Employees,"},

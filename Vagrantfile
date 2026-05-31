@@ -74,7 +74,6 @@ Vagrant.configure("2") do |cfg|
       # Configure the Root DC DNS server now that the forest (and its zones) exist.
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 RootDcDns"
 
-      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/create-ad-objects.ps1 forest-variables.json planned-users.json"
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/create-ad-objects.ps1 forest-variables.json lab-users.json"
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/configure-attack-paths.ps1"
 

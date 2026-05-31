@@ -198,14 +198,15 @@ Checks IP reachability, WinRM connectivity, and key service status for all VMs.
 | `SILENT\sccm_naa` | set by SCCM | PXE/NAA credential theft (CRED-1) |
 | `SILENT\sccm_cpia` | set by SCCM | Client push NTLM coercion (CRED-3) |
 
-### Tiered Admin Accounts
+### Admin Accounts
 
 | Account | Password | Role |
 | --- | --- | --- |
 | `SILENT\Administrator` | `P@ssw0rd` | Domain Admin |
-| `SILENT\t0_example.user` | set in planned-users.json | Tier 0 (Domain Admin equivalent) |
-| `SILENT\t1_example.user` | set in planned-users.json | Tier 1 (Server Admin) |
-| `SILENT\t2_example.user` | set in planned-users.json | Tier 2 (Workstation Admin) |
+
+Additional privileged and attack-relevant accounts (e.g. `c.wright`, `m.thompson`,
+`b.anderson` in Domain Admins, and the `svc_*` service accounts) are defined in
+`lab-users.json`.
 
 ---
 
@@ -220,8 +221,7 @@ SilentRUN-Lab/
 ├── provision/
 │   └── variables/
 │       ├── forest-variables.json            # Domain config (name, password, DC IP)
-│       ├── planned-users.json               # Tiered admin structure (Tier 0/1/2)
-│       ├── lab-users.json                   # 46 departmental users + service accounts
+│       ├── lab-users.json                   # OUs, groups, departmental users + service accounts
 │       └── dns_entries.csv                  # DNS records
 └── sharedscripts/
     ├── ps.ps1                               # PowerShell execution wrapper
