@@ -1,6 +1,24 @@
 # ==============================================================================
 # Script: fixSccmPermissions.ps1
-# Purpose: Configure SCCM Console Access & RBAC Permissions (Combined Script)
+# Purpose: Post-install RBAC bootstrap - grant the human admin accounts
+#          (SILENT\Administrator, SILENT\SCCMAdmin) Full Administrator in SCCM.
+#
+# WHY THIS EXISTS (by design, not a workaround):
+#   SCCM makes the account that runs setup.exe the SOLE initial Full Administrator.
+#   Here, Vagrant runs the shell provisioners (including installMECM.ps1 ->
+#   setup.exe) as NT AUTHORITY\SYSTEM, so SYSTEM is the only account with console
+#   access right after install. No domain user can manage SCCM until an existing
+#   admin grants them RBAC. This script is that grant step.
+#
+#   Because the only existing admin is SYSTEM, this script must itself run as
+#   SYSTEM to connect to the SMS Provider and call New-CMAdministrativeUser.
+#   That is why it self-elevates below - it is matching the install identity,
+#   not escalating arbitrarily.
+#
+#   (Alternative considered and rejected for now: install SCCM as
+#   SILENT\Administrator so it is Full Admin from the start. That removes this
+#   step but means wrapping the long, log-streamed setup in a run-as task -
+#   higher risk on the most fragile part of the lab. See git history / notes.)
 # ==============================================================================
 
 $ErrorActionPreference = "Stop"
@@ -18,9 +36,11 @@ $AdminConsoleBin = "C:\Program Files (x86)\Microsoft Configuration Manager\Admin
 $MediaPath = "C:\vagrant\sharedscripts\services\SCCM\MECM_Setup\Media"
 
 # ==============================================================================
-# CHECK: Run as SYSTEM if needed. Re-runs this whole script as SYSTEM via the
-# shared Invoke-AsUserTask helper (ScriptPath mode keeps $PSScriptRoot correct),
-# then exits the non-SYSTEM instance.
+# RUN AS THE INSTALL IDENTITY (SYSTEM)
+# SCCM grants Full Admin only to the install account (SYSTEM here), so this
+# script must run as SYSTEM to have RBAC rights. If invoked as anyone else, it
+# re-runs itself as SYSTEM via Invoke-AsUserTask (ScriptPath mode keeps
+# $PSScriptRoot correct) and the non-SYSTEM instance exits.
 # ==============================================================================
 $CurrentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 if ($CurrentUser -ne "NT AUTHORITY\SYSTEM") {
