@@ -341,30 +341,24 @@ try {
 
         Write-Host " [INFO] Processing boot image '$($BootImg.Name)'..." -ForegroundColor Gray
 
-        if ($EnablePxe) {
-            # Re-resolve a FULL object by Name. Get-CMBootImage by Name (not -Id, not
-            # -Fast) hydrates ImageOSVersion; the -Id path returns a lazy object with it
-            # empty, which fails Set-CMBootImage's WinPE-version gate and throws a
-            # spurious "legacy WinPE 3.1" error on real ADK 10 images.
-            $fullImg = Get-CMBootImage -Name $BootImg.Name
+if ($EnablePxe) {
+    # On a freshly-built site the SMS Provider may not have populated the WIM's
+    # ImageOSVersion yet. Poll for it before calling the version-gated cmdlet.
+    $fullImg = $null
+    for ($i = 0; $i -lt 12; $i++) {
+        $fullImg = Get-CMBootImage -Id $BootImg.PackageID
+        if (-not [string]::IsNullOrWhiteSpace($fullImg.ImageOSVersion)) { break }
+        Start-Sleep -Seconds 5
+    }
+    $osVer = $fullImg.ImageOSVersion
+    Write-Host " [INFO] Resolved ImageOSVersion='$osVer' after wait." -ForegroundColor Gray
 
-            $osVer = $fullImg.ImageOSVersion
-            if ([string]::IsNullOrEmpty($osVer)) {
-                Write-Host " [WARN] ImageOSVersion empty; forcing PXE enable anyway (assumed ADK10+)." -ForegroundColor Yellow
-            }
-
-            # Only WinPE 3.1 / earlier (6.0.x, 6.1.x) are true legacy. Empty version is
-            # NOT treated as legacy here, since that was the cause of the false positive.
-            $isLegacy = ($osVer -like "6.0.*" -or $osVer -like "6.1.*")
-
-            if (-not $isLegacy) {
-                Set-CMBootImage -InputObject $fullImg -DeployFromPxeDistributionPoint $true -ErrorAction Stop
-                Write-Host " [OK] PXE deploy flag set on '$($fullImg.Name)' (WinPE $osVer)." -ForegroundColor Green
-            }
-            else {
-                Write-Host " [SKIP] '$($fullImg.Name)' is legacy WinPE ($osVer); not PXE-enabling." -ForegroundColor Yellow
-            }
-        }
+    $isLegacy = ($osVer -like "6.0.*" -or $osVer -like "6.1.*")
+    if (-not $isLegacy) {
+        Set-CMBootImage -InputObject $fullImg -DeployFromPxeDistributionPoint $true -ErrorAction Stop
+        Write-Host " [OK] PXE deploy flag set (WinPE $osVer)." -ForegroundColor Green
+    }
+}
 
         # Distribute to DP
         try {

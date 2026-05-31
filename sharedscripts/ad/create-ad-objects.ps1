@@ -91,13 +91,11 @@ foreach ($file in $files) {
             }            
 
             if ($object | Get-Member spn) {
-                $spnFQDN = $object.spn + "." + $domain.fqdn
-                $optional['ServicePrincipalNames'] = @($object.spn, $spnFQDN)
+                # SPNs in lab-users.json are already fully qualified; register as-is.
+                $optional['ServicePrincipalNames'] = @($object.spn)
             }
 
             $password = ConvertTo-SecureString $object.password -AsPlaintext -Force
-		    echo $object
-		    echo $object.username
 
             New-ADUser `
                 -Name $object.username `
@@ -106,6 +104,8 @@ foreach ($file in $files) {
                 -Enabled $true `
                 -AccountPassword $password `
                 @optional
+
+            Write-Host "[OK] Created user $($object.username)"
 
             if ($object | Get-Member groups) {
                 foreach ($group in $object.groups) {

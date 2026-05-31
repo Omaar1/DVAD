@@ -15,14 +15,17 @@ echo "Pointing DNS"
 # Point DNS at domain controller
 $adapters = Get-WmiObject Win32_NetworkAdapterConfiguration
 if ($adapters) {
-    $adapters | ForEach-Object {$_.SetDNSServerSearchOrder($domain.dcIPAddress)}
+    $adapters | ForEach-Object {
+        $r = $_.SetDNSServerSearchOrder($domain.dcIPAddress)
+        if ($r.ReturnValue -ne 0) {
+            Write-Warning "DNS set failed on NIC '$($_.Description)' (code $($r.ReturnValue))"
+        }
+    }
 }
 echo "Creating account"
 $securePassword = ConvertTo-SecureString $domain.administratorPassword -AsPlainText -Force
 $username = $domain.netbiosName + "\Administrator" 
 $domainAdminCredentials = New-Object System.Management.Automation.PSCredential($username, $securePassword)
-echo $ou
-echo ou
 $params = @{}
 if ($ou -ne "default") {
     $params["OUPath"] = $ou + "," + $domain.dn

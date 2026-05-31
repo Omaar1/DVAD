@@ -114,10 +114,10 @@ Write-Host "`n=== PART 2: AUTHENTICATED PILOT TASK SEQUENCE ===" -ForegroundColo
 try {
     # 1. Create Collection
     if (-not (Get-CMCollection -Name $Collection_Auth)) {
-        New-CMDeviceCollection -Name $Collection_Auth -LimitingCollectionName $LimitingColl_Auth
-        Set-CMCollection -Name $Collection_Auth -RefreshType Continuous
+        New-CMDeviceCollection -Name $Collection_Auth -LimitingCollectionName $LimitingColl_Auth | Out-Null
+        Set-CMCollection -Name $Collection_Auth -RefreshType Continuous | Out-Null
         $Query = "select * from SMS_R_System where Name like '$NamingPattern_Auth'"
-        Add-CMDeviceCollectionQueryMembershipRule -CollectionName $Collection_Auth -RuleName "Auto-Add Pilots" -QueryExpression $Query
+        Add-CMDeviceCollectionQueryMembershipRule -CollectionName $Collection_Auth -RuleName "Auto-Add Pilots" -QueryExpression $Query | Out-Null
         Write-Host " [OK] Collection '$Collection_Auth' created." -ForegroundColor Green
     }
 
@@ -148,11 +148,11 @@ try {
     $CurrentVar = Get-CMDeviceCollectionVariable -CollectionName $Collection_Auth -VariableName $CollVarName -ErrorAction SilentlyContinue
 
     if ($CurrentVar) {
-        Set-CMDeviceCollectionVariable -CollectionName $Collection_Auth -VariableName $CollVarName -NewVariableValue $CollVarValue -IsMask $true
+        Set-CMDeviceCollectionVariable -CollectionName $Collection_Auth -VariableName $CollVarName -NewVariableValue $CollVarValue -IsMask $true | Out-Null
         Write-Host " [OK] Variable updated." -ForegroundColor Green
     }
     else {
-        New-CMDeviceCollectionVariable -CollectionName $Collection_Auth -VariableName $CollVarName -Value $CollVarValue -IsMask $true
+        New-CMDeviceCollectionVariable -CollectionName $Collection_Auth -VariableName $CollVarName -Value $CollVarValue -IsMask $true | Out-Null
         Write-Host " [OK] Variable created." -ForegroundColor Green
     }
 }

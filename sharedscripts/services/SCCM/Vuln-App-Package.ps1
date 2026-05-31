@@ -83,7 +83,7 @@ try {
             -CommandLine "powershell.exe -ExecutionPolicy Bypass -File $ScriptName" `
             -RunMode RunWithAdministrativeRights `
             -ProgramRunType WhetherOrNotUserIsLoggedOn `
-            -Duration 15
+            -Duration 15 | Out-Null
                       
         Write-Host "    + Program '$ProgramName' created." -ForegroundColor Green
     }

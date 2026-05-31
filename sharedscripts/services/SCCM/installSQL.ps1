@@ -238,7 +238,7 @@ if ($Port) {
 }
 
 # Dismount ISO after starting (no longer needed)
-Dismount-DiskImage -ImagePath $LocalISO
+Dismount-DiskImage -ImagePath $LocalISO | Out-Null
 
 Stop-PhaseTimer -Status Success
 

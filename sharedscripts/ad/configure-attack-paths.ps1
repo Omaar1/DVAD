@@ -198,6 +198,8 @@ if (-not `$kds) {
 if (-not `$gmsaExists) {
     New-ADServiceAccount -Name "gmsa_svc" -DNSHostName "gmsa_svc.`$domainDNS" -PrincipalsAllowedToRetrieveManagedPassword "GMSA-Readers" -Enabled `$true
 }
+# Enforce readers even if account already existed (e.g. created by a prior timed-out run).
+Set-ADServiceAccount "gmsa_svc" -PrincipalsAllowedToRetrieveManagedPassword "GMSA-Readers"
 
 `$gmsaSID    = (Get-ADServiceAccount "gmsa_svc").SID
 `$dcObj      = [ADSI]"LDAP://`$domainDN"
@@ -324,14 +326,17 @@ Write-Host "  [GROUP] File-Share-Access populated"
 Write-Host ""
 Write-Host "[Extra] Configuring anonymous LDAP bind..." -ForegroundColor Green
 
-$dircfgDN = "CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,$domainDN"
-try {
-    $dircfg = [ADSI]"LDAP://$dircfgDN"
-    $dircfg.put("dSHeuristics", "0000002")
-    $dircfg.SetInfo()
+# Writing to the Configuration NC needs a real batch token; the inline WinRM
+# token gets "Access is denied". Run it via a scheduled task like GMSA/LAPS.
+$anonScript = @"
+`$dircfg = [ADSI]"LDAP://CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,$domainDN"
+`$dircfg.put("dSHeuristics", "0000002")
+`$dircfg.SetInfo()
+"@
+if (Invoke-AsUserTask -Name "SetAnonBind" -ScriptContent $anonScript -User "$netbios\Administrator" -Password $adminPw -TimeoutSec 60) {
     Write-Host "  [ANON] dSHeuristics set - anonymous LDAP queries enabled" -ForegroundColor Yellow
-} catch {
-    Write-Host "  [WARN] Could not set dSHeuristics: $_" -ForegroundColor Red
+} else {
+    Write-Host "  [WARN] Could not set dSHeuristics (see SetAnonBind log)" -ForegroundColor Red
 }
 
 # ============================================================================
