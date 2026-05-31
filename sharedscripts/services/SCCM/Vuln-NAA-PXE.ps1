@@ -342,11 +342,13 @@ try {
         Write-Host " [INFO] Processing boot image '$($BootImg.Name)'..." -ForegroundColor Gray
 
 if ($EnablePxe) {
-    # On a freshly-built site the SMS Provider may not have populated the WIM's
-    # ImageOSVersion yet. Poll for it before calling the version-gated cmdlet.
+    # Re-resolve a FULL object by Name. Set-CMBootImage's WinPE-version gate reads
+    # the InputObject's OWN ImageOSVersion; the -Id (lazy) object leaves it empty
+    # even when we can read 10.x off it, so the cmdlet throws a false "legacy WinPE
+    # 3.1" error. -Name hydrates it. Poll in case the SMS Provider lags on a fresh site.
     $fullImg = $null
     for ($i = 0; $i -lt 12; $i++) {
-        $fullImg = Get-CMBootImage -Id $BootImg.PackageID
+        $fullImg = Get-CMBootImage -Name $BootImg.Name
         if (-not [string]::IsNullOrWhiteSpace($fullImg.ImageOSVersion)) { break }
         Start-Sleep -Seconds 5
     }
@@ -357,6 +359,9 @@ if ($EnablePxe) {
     if (-not $isLegacy) {
         Set-CMBootImage -InputObject $fullImg -DeployFromPxeDistributionPoint $true -ErrorAction Stop
         Write-Host " [OK] PXE deploy flag set (WinPE $osVer)." -ForegroundColor Green
+    }
+    else {
+        Write-Host " [SKIP] '$($fullImg.Name)' is legacy WinPE ($osVer); not PXE-enabling." -ForegroundColor Yellow
     }
 }
 
