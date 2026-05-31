@@ -67,19 +67,18 @@ Vagrant.configure("2") do |cfg|
       config.vm.provision "shell", reboot: true
       
       
-      # # # Configure DNS
-      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/network-setup.ps1 network-setup-rootdc.ps1 root_dns_entries.csv"
-      config.vm.provision "shell", reboot: true
-
       # # # # Create forest root
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/install-forest.ps1 forest-variables.json"
       config.vm.provision "shell", reboot: true
+
+      # Configure the Root DC DNS server now that the forest (and its zones) exist.
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 -Action RootDcDns"
 
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/create-ad-objects.ps1 forest-variables.json planned-users.json"
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/create-ad-objects.ps1 forest-variables.json lab-users.json"
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/configure-attack-paths.ps1"
 
-      # Reboot so that scheduled task runs
+      # Final reboot to settle configuration
       config.vm.provision "shell", reboot: true
 
     end
@@ -130,7 +129,7 @@ Vagrant.configure("2") do |cfg|
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/ADCS/install-adcs.ps1"
       config.vm.provision "shell", reboot: true
 
-      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/network-setup.ps1"
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 -Action MemberDns"
       config.vm.provision "shell", reboot: true
 
 
@@ -265,7 +264,7 @@ Vagrant.configure("2") do |cfg|
       # config.vm.provision "shell", reboot: true
 
       # configure network 
-      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/network-setup.ps1"
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 -Action MemberDns"
       config.vm.provision "shell", reboot: true
  
 
@@ -389,7 +388,7 @@ Vagrant.configure("2") do |cfg|
       config.vm.provision "shell", reboot: true
 
       # Configure DNS
-      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/network-setup.ps1"
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 -Action MemberDns"
       config.vm.provision "shell", reboot: true
 
       # Apply machine-dependent attack paths (delegation, LAPS, RBCD)

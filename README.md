@@ -232,8 +232,7 @@ SilentRUN-Lab/
     │   ├── configure-attack-paths.ps1       # ACL chains, Kerberoast, AS-REP, GMSA, LAPS
     │   └── configure-machine-attacks.ps1    # Delegation, RBCD (runs on SVR1)
     ├── networking/
-    │   ├── network-setup.ps1                # Network config dispatcher
-    │   └── network-setup-rootdc.ps1         # Root DC DNS configuration
+    │   └── configure-network.ps1            # All networking (Policy/MemberDns/RootDcDns/NatInternetDns)
     ├── windows/
     │   └── provision-base.ps1               # Base OS configuration
     ├── tools/

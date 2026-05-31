@@ -21,23 +21,16 @@ $domain = Get-Content -Raw -Path "C:\vagrant\provision\variables\domain-variable
 # ==============================================================================
 Start-PhaseTimer -PhaseName "NETWORK ADAPTER CONFIGURATION"
 
-# Detect NICs by ifIndex order. Vagrant attaches NAT first, private_network second.
-$nics = Get-NetAdapter | Where-Object Status -ne 'Disabled' | Sort-Object ifIndex
-$natName    = $nics[0].Name
-$domainName = $nics[1].Name
+# Identify the lab IP/NIC positively by subnet (deterministic, provider-agnostic).
+# Per-NIC policy (IPv6 off, metrics, NAT kept out of DNS) is applied in provision-base.
+$labCfg     = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -like '10.10.10.*' } | Select-Object -First 1
+$ip         = $labCfg.IPAddress
+$domainName = (Get-NetAdapter -InterfaceIndex $labCfg.InterfaceIndex).Name
+Write-Host " [INFO] Domain NIC: $domainName ($ip)" -ForegroundColor Yellow
 
-# Configure network adapter for optimal DNS operation
-$ip = (Get-NetAdapter -Name $domainName | Get-NetIPAddress | Where-Object { $_.AddressFamily -eq 'IPv4' }).IPAddress
-Write-Host " [INFO] IP Address: $ip" -ForegroundColor Yellow
-
-# Disable IPv6 on the domain interface
-Set-NetAdapterBinding -InterfaceAlias $domainName -ComponentID 'ms_tcpip6' -Enabled $false
-Write-Host " [OK] IPv6 disabled on $domainName" -ForegroundColor Green
-
-# Configure DNS client settings
+# Root DC is its own DNS server - clear any client DNS on the domain interface.
 $adapter = Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object { $_.IPAddress -contains $ip }
 if ($adapter) {
-    # Clear any existing DNS servers
     $adapter.SetDNSServerSearchOrder(@())
     Write-Host " [OK] DNS servers cleared" -ForegroundColor Green
 }
@@ -89,30 +82,9 @@ if (Get-WindowsFeature -Name DNS | Where-Object { $_.Installed -eq $true }) {
         Set-ItemProperty -Path $dnsParamsKey -Name 'ListenAddresses' -Value ([string[]]@($ip))
         Write-Host " [OK] DNS bound to $ip" -ForegroundColor Green
     }
-    
-    # Disable dynamic updates on the NAT interface (idempotent)
-    $natAdapter = Get-NetAdapter -Name $natName -ErrorAction SilentlyContinue
-    if ($natAdapter) {
-        $natDns = Get-DnsClient -InterfaceIndex $natAdapter.ifIndex
-        if ($natDns.RegisterThisConnectionsAddress -eq $false) {
-            Write-Host " [SKIP] NAT interface DNS registration already disabled" -ForegroundColor DarkGray
-        } else {
-            Set-DnsClient -InterfaceIndex $natAdapter.ifIndex -RegisterThisConnectionsAddress $false
-            Write-Host " [OK] NAT interface DNS registration disabled" -ForegroundColor Green
-        }
-    }
 
-    # Enable dynamic updates on the domain interface (idempotent)
-    $domainAdapter = Get-NetAdapter -Name $domainName -ErrorAction SilentlyContinue
-    if ($domainAdapter) {
-        $domDns = Get-DnsClient -InterfaceIndex $domainAdapter.ifIndex
-        if ($domDns.RegisterThisConnectionsAddress -eq $true) {
-            Write-Host " [SKIP] Domain interface DNS registration already enabled" -ForegroundColor DarkGray
-        } else {
-            Set-DnsClient -InterfaceIndex $domainAdapter.ifIndex -RegisterThisConnectionsAddress $true
-            Write-Host " [OK] Domain interface DNS registration enabled" -ForegroundColor Green
-        }
-    }
+    # Per-NIC DNS registration policy (NAT kept out of DNS) is applied centrally in
+    # provision-base via configure-network.ps1 -Action Policy and persists across reboots.
 }
 
 $safeModePassword = ConvertTo-SecureString $forest.safeModeAdministratorPassword -AsPlainText -Force

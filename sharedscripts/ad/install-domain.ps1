@@ -6,13 +6,11 @@ param(
 $domain = Get-Content -Raw -Path "C:\vagrant\provision\variables\domain-variables.json" | ConvertFrom-Json
 $parent = Get-Content -Raw -Path "C:\vagrant\provision\variables\forest-variables.json" | ConvertFrom-Json
 
-# Detect NICs by ifIndex order. Vagrant attaches NAT first, private_network second.
-$nics = Get-NetAdapter | Where-Object Status -ne 'Disabled' | Sort-Object ifIndex
-$natName    = $nics[0].Name
-$domainName = $nics[1].Name
-
-# Configure network adapter for optimal DNS operation
-$ip = (Get-NetAdapter -Name $domainName | Get-NetIPAddress | Where-Object { $_.AddressFamily -eq 'IPv4' }).IPAddress
+# Identify the lab IP/NIC positively by subnet (deterministic, provider-agnostic).
+# Per-NIC policy (IPv6 off, metrics, NAT kept out of DNS) is applied in provision-base.
+$labCfg     = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -like '10.10.10.*' } | Select-Object -First 1
+$ip         = $labCfg.IPAddress
+$domainName = (Get-NetAdapter -InterfaceIndex $labCfg.InterfaceIndex).Name
 
 # Disable IPv6 on the domain interface
 Set-NetAdapterBinding -InterfaceAlias $domainName -ComponentID 'ms_tcpip6' -Enabled $false
@@ -35,17 +33,8 @@ if (Get-WindowsFeature -Name DNS | Where-Object { $_.Installed -eq $true }) {
     # Bind DNS Server to specific IP
     Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\DNS\Parameters' -Name 'ListenAddresses' -Value @($ip)
     
-    # Disable dynamic updates on the NAT interface
-    $natAdapter = Get-NetAdapter -Name $natName
-    if ($natAdapter) {
-        Set-DnsClient -InterfaceIndex $natAdapter.ifIndex -RegisterThisConnectionsAddress $false
-    }
-
-    # Enable dynamic updates on the domain interface
-    $domainAdapter = Get-NetAdapter -Name $domainName
-    if ($domainAdapter) {
-        Set-DnsClient -InterfaceIndex $domainAdapter.ifIndex -RegisterThisConnectionsAddress $true
-    }
+    # Per-NIC DNS registration policy (NAT kept out of DNS) is applied centrally in
+    # provision-base via configure-network.ps1 -Action Policy and persists across reboots.
 }
 
 # Verify DNS resolution to parent DC

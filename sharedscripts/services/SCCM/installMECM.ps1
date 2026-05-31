@@ -44,8 +44,7 @@ $IniFile = "$ShareRoot\ConfigMgrAutoSave.ini"
 Start-PhaseTimer -PhaseName "VERIFYING CONNECTIVITY"
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $natName = (Get-NetAdapter | Where-Object Status -ne 'Disabled' | Sort-Object ifIndex | Select-Object -First 1).Name
-    Set-DnsClientServerAddress -InterfaceAlias $natName -ServerAddresses ("8.8.8.8", "8.8.4.4") -ErrorAction SilentlyContinue
+    & "C:\vagrant\sharedscripts\networking\configure-network.ps1" -Action NatInternetDns
     if (Test-Connection "google.com" -Count 1 -Quiet) { 
         Write-Host " [OK] Internet Connected." -ForegroundColor Green 
         Stop-PhaseTimer -Status Success

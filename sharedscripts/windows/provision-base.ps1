@@ -35,15 +35,13 @@ Set-Culture $zone
 # disable both firewalls !
 Set-NetFirewallProfile -Profile Domain, Public, Private -Enabled False
 
-# Detect NICs by ifIndex order. Vagrant attaches NAT first, private_network second.
-$nics = Get-NetAdapter | Where-Object Status -ne 'Disabled' | Sort-Object ifIndex
-$natName    = $nics[0].Name
-$domainName = $nics[1].Name
-Write-Host "NAT adapter: $natName"
-Write-Host "Domain adapter: $domainName"
+# Apply the deterministic lab NIC policy: identify the domain NIC by lab subnet,
+# disable IPv6, set interface metrics, and keep every non-lab (NAT) NIC out of DNS.
+# Single source of truth - see configure-network.ps1.
+& "C:\vagrant\sharedscripts\networking\configure-network.ps1" -Action Policy
 
-## enabale NAT adapter on startUp
-schtasks /create /f /tn "enable NAT adapter" /sc onstart /delay 0000:30 /rl highest /ru system /tr "powershell.exe netsh interface set interface '$natName' enable"
+## The old "enable NAT adapter" onstart task was removed as redundant - nothing
+## disables the NAT NIC, so there is nothing to re-enable at boot.
 
 # Disable password expiry
 net accounts /maxpwage:unlimited
@@ -51,28 +49,6 @@ net accounts /maxpwage:unlimited
 # This is ESSENTIAL to prevent domains from breaking after 3 months!!!
 # !!!!!!!!!!!!!!!!!!!! DO NOT REMOVE !!!!!!!!!!!!!!!!!!!!!!!!!
 Set-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name DisablePasswordChange -Value 1
-
-# Add networ metrics very important !!  !!!!!!!!!!!!!!!!!!!
-Set-NetIPInterface -InterfaceAlias $domainName -InterfaceMetric 5
-Set-NetIPInterface -InterfaceAlias $natName    -InterfaceMetric 55
-
-# Configure network adapters for optimal DNS and domain operation
-# Disable IPv6 on all interfaces
-Get-NetAdapter | ForEach-Object {
-    Set-NetAdapterBinding -InterfaceAlias $_.Name -ComponentID 'ms_tcpip6' -Enabled $false
-}
-
-# Disable dynamic DNS registration on NAT interface
-$natAdapter = Get-NetAdapter -Name $natName
-if ($natAdapter) {
-    Set-DnsClient -InterfaceIndex $natAdapter.ifIndex -RegisterThisConnectionsAddress $false
-}
-
-# Enable DNS registration on domain interface
-$domainAdapter = Get-NetAdapter -Name $domainName
-if ($domainAdapter) {
-    Set-DnsClient -InterfaceIndex $domainAdapter.ifIndex -RegisterThisConnectionsAddress $true
-}
 
 # set the Windows Update service to "disabled"
 sc.exe config wuauserv start=disabled
