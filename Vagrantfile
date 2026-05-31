@@ -72,7 +72,7 @@ Vagrant.configure("2") do |cfg|
       config.vm.provision "shell", reboot: true
 
       # Configure the Root DC DNS server now that the forest (and its zones) exist.
-      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 -Action RootDcDns"
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 RootDcDns"
 
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/create-ad-objects.ps1 forest-variables.json planned-users.json"
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/create-ad-objects.ps1 forest-variables.json lab-users.json"
@@ -129,7 +129,7 @@ Vagrant.configure("2") do |cfg|
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/ADCS/install-adcs.ps1"
       config.vm.provision "shell", reboot: true
 
-      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 -Action MemberDns"
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 MemberDns"
       config.vm.provision "shell", reboot: true
 
 
@@ -264,7 +264,7 @@ Vagrant.configure("2") do |cfg|
       # config.vm.provision "shell", reboot: true
 
       # configure network 
-      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 -Action MemberDns"
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 MemberDns"
       config.vm.provision "shell", reboot: true
  
 
@@ -388,7 +388,7 @@ Vagrant.configure("2") do |cfg|
       config.vm.provision "shell", reboot: true
 
       # Configure DNS
-      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 -Action MemberDns"
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 MemberDns"
       config.vm.provision "shell", reboot: true
 
       # Apply machine-dependent attack paths (delegation, LAPS, RBCD)
