@@ -54,10 +54,15 @@ catch { `$_.Exception.Message | Out-File "$log" -Append; "FAILED" | Out-File "$s
 "@ | Out-File -FilePath $wrapper -Encoding UTF8
 
     $tr = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$wrapper`""
+    # Schedule for tomorrow so /st is never in the past. Otherwise schtasks prints
+    # "WARNING: Task may not run because /ST is earlier than current time" to stderr,
+    # which trips the ps.ps1 Stop/trap. We run the task immediately via /run anyway,
+    # so the scheduled time is irrelevant.
+    $startDate = (Get-Date).AddDays(1).ToString('MM/dd/yyyy')
     if ([string]::IsNullOrWhiteSpace($User) -or $User -eq 'SYSTEM') {
-        schtasks /create /f /tn $Name /sc once /st 00:00 /rl highest /ru "SYSTEM" /tr $tr 2>&1 | Out-Null
+        schtasks /create /f /tn $Name /sc once /sd $startDate /st 00:00 /rl highest /ru "SYSTEM" /tr $tr 2>&1 | Out-Null
     } else {
-        schtasks /create /f /tn $Name /sc once /st 00:00 /rl highest /ru $User /rp $Password /tr $tr 2>&1 | Out-Null
+        schtasks /create /f /tn $Name /sc once /sd $startDate /st 00:00 /rl highest /ru $User /rp $Password /tr $tr 2>&1 | Out-Null
     }
     schtasks /run /tn $Name 2>&1 | Out-Null
 
