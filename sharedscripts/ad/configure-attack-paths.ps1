@@ -12,6 +12,7 @@
 #   7. AllExtendedRights -> LAPS   (t.brown -> SVR1$)
 
 Import-Module ActiveDirectory -ErrorAction Stop
+. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
 
 $domainDN  = (Get-ADDomain).DistinguishedName
 $domainDNS = (Get-ADDomain).DNSRoot
@@ -211,26 +212,11 @@ if (-not `$gmsaExists) {
 
 "DONE" | Out-File C:\gmsa_setup_status.txt
 "@
-$gmsaScript | Out-File -FilePath "C:\setup_gmsa.ps1" -Encoding UTF8
-Remove-Item "C:\gmsa_setup_status.txt" -Force -ErrorAction SilentlyContinue
-
-$tomorrow = (Get-Date).AddDays(1).ToString("MM/dd/yyyy")
-schtasks /create /f /tn "SetupGMSA" /sc once /sd $tomorrow /st 00:00 /rl highest /ru "$netbios\Administrator" /rp $adminPw /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\setup_gmsa.ps1" 2>&1 | Out-Null
-schtasks /run /tn "SetupGMSA" 2>&1 | Out-Null
-
-$elapsed = 0
-while ($elapsed -lt 120) {
-    Start-Sleep -Seconds 5; $elapsed += 5
-    if (Test-Path "C:\gmsa_setup_status.txt") { break }
-}
-schtasks /delete /tn "SetupGMSA" /f 2>&1 | Out-Null
-Remove-Item "C:\setup_gmsa.ps1" -Force -ErrorAction SilentlyContinue
-
-if (Test-Path "C:\gmsa_setup_status.txt") {
+if (Invoke-AsUserTask -Name "SetupGMSA" -ScriptContent $gmsaScript -User "$netbios\Administrator" -Password $adminPw -TimeoutSec 120) {
     Write-Host "  [KDS] Root key ready"
     Write-Host "  [GMSA] gmsa_svc$ created with DCSync rights"
 } else {
-    Write-Host "  [WARN] GMSA setup timed out" -ForegroundColor Red
+    Write-Host "  [WARN] GMSA setup failed or timed out" -ForegroundColor Red
 }
 
 $gmsaReadersDN = (Get-ADGroup "GMSA-Readers").DistinguishedName
@@ -288,24 +274,10 @@ if (`$svr1) {
 
 "DONE" | Out-File C:\laps_setup_status.txt
 "@
-$lapsScript | Out-File -FilePath "C:\setup_laps.ps1" -Encoding UTF8
-Remove-Item "C:\laps_setup_status.txt" -Force -ErrorAction SilentlyContinue
-
-schtasks /create /f /tn "SetupLAPS" /sc once /sd $tomorrow /st 00:00 /rl highest /ru "$netbios\Administrator" /rp $adminPw /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\setup_laps.ps1" 2>&1 | Out-Null
-schtasks /run /tn "SetupLAPS" 2>&1 | Out-Null
-
-$elapsed = 0
-while ($elapsed -lt 120) {
-    Start-Sleep -Seconds 5; $elapsed += 5
-    if (Test-Path "C:\laps_setup_status.txt") { break }
-}
-schtasks /delete /tn "SetupLAPS" /f 2>&1 | Out-Null
-Remove-Item "C:\setup_laps.ps1" -Force -ErrorAction SilentlyContinue
-
-if (Test-Path "C:\laps_setup_status.txt") {
+if (Invoke-AsUserTask -Name "SetupLAPS" -ScriptContent $lapsScript -User "$netbios\Administrator" -Password $adminPw -TimeoutSec 120) {
     Write-Host "  [LAPS] Schema extended and SVR1 password set"
 } else {
-    Write-Host "  [WARN] LAPS setup timed out - SVR1 may not have joined yet (AllExtendedRights still set)" -ForegroundColor Yellow
+    Write-Host "  [WARN] LAPS setup failed or timed out - SVR1 may not have joined yet (AllExtendedRights still set)" -ForegroundColor Yellow
 }
 
 $svr1 = $null

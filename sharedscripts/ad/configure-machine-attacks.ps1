@@ -11,6 +11,8 @@ $domain   = Get-Content -Raw -Path "C:\vagrant\provision\variables\${Parentdomai
 $username = $domain.netbiosName + "\Administrator"
 $password = $domain.administratorPassword
 
+. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
+
 # Ensure RSAT AD module is available (server1 may not have it yet)
 if (-not (Get-WindowsFeature RSAT-AD-PowerShell).Installed) {
     Write-Host "[*] Installing RSAT-AD-PowerShell..."
@@ -120,50 +122,11 @@ Write-Host " 6c: RBCD                       l.garcia GenericWrite on ADCS$" -For
 Write-Host " 7:  LAPS AllExtendedRights     t.brown -> SVR1$ (reads ms-Mcs-AdmPwd)" -ForegroundColor White
 '@
 
-$scriptPath = "C:\configure_machine_inner.ps1"
-$statusFile = "C:\machine_attacks_status.txt"
-$logFile    = "C:\machine_attacks.log"
-
-$innerScript | Out-File -FilePath $scriptPath -Encoding UTF8
-Remove-Item $statusFile -Force -ErrorAction SilentlyContinue
-Remove-Item $logFile    -Force -ErrorAction SilentlyContinue
-
-$wrapperScript = @"
-try {
-    & "$scriptPath" *>> "$logFile"
-    "SUCCESS" | Out-File "$statusFile"
-} catch {
-    `$_.Exception.Message | Out-File "$logFile" -Append
-    "FAILED" | Out-File "$statusFile"
-}
-"@
-$wrapperScript | Out-File -FilePath "C:\machine_attacks_wrapper.ps1" -Encoding UTF8
-
 Write-Host "[*] Running machine-dependent attack paths as $username via scheduled task..."
-schtasks /create /f /tn "MachineAttacks" /sc once /st 00:00 /rl highest /ru $username /rp $password /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\machine_attacks_wrapper.ps1" 2>&1 | Out-Null
-schtasks /run /tn "MachineAttacks" 2>&1 | Out-Null
-
-$elapsed = 0
-while ($elapsed -lt 180) {
-    Start-Sleep -Seconds 5
-    $elapsed += 5
-    if (Test-Path $statusFile) { break }
-    if ($elapsed % 30 -eq 0) { Write-Host "  Still running... ($elapsed seconds)" }
-}
-
-if (Test-Path $statusFile) {
-    $status = Get-Content $statusFile
-    Write-Host "[*] Machine attacks status: $status"
-    if (Test-Path $logFile) { Get-Content $logFile }
-    if ($status -ne "SUCCESS") {
-        Write-Host "[!] Machine attacks configuration failed" -ForegroundColor Red
-    }
+if (Invoke-AsUserTask -Name "MachineAttacks" -ScriptContent $innerScript -User $username -Password $password -TimeoutSec 180) {
+    Write-Host "[*] Machine attacks status: SUCCESS"
 } else {
-    Write-Host "[!] Timed out waiting for machine attacks (180s)" -ForegroundColor Red
+    Write-Host "[!] Machine attacks configuration failed or timed out" -ForegroundColor Red
 }
-
-schtasks /delete /tn "MachineAttacks" /f 2>$null
-Remove-Item "C:\machine_attacks_wrapper.ps1" -Force -ErrorAction SilentlyContinue
-Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
 
 Write-Host "[+] configure-machine-attacks.ps1 complete"

@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 
 # Import Phase Timer Module
 Import-Module "$PSScriptRoot\PhaseTimer.psm1" -Force
+. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
 
 # --- CONFIGURATION ---
 $SiteCode = "PS1"
@@ -17,46 +18,14 @@ $AdminConsoleBin = "C:\Program Files (x86)\Microsoft Configuration Manager\Admin
 $MediaPath = "C:\vagrant\sharedscripts\services\SCCM\MECM_Setup\Media"
 
 # ==============================================================================
-# FUNCTION: Run-AsSYSTEM
-# ==============================================================================
-function Invoke-AsSystem {
-    param([string]$ScriptPath)
-    
-    $TaskName = "FixSCCMPermissions_Task"
-    $LogPath = "C:\SCCM_Permissions_Log.txt"
-    
-    $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$ScriptPath`" *>&1 | Out-File `"$LogPath`" -Encoding UTF8"
-    $Principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddSeconds(2)
-    
-    Register-ScheduledTask -Action $Action -Principal $Principal -Trigger $Trigger -TaskName $TaskName -Force | Out-Null
-    
-    Write-Host " [INFO] Task registered. Waiting for SYSTEM execution..." -ForegroundColor Yellow
-    Start-Sleep -Seconds 5
-    
-    # Wait for completion (max 5 min)
-    $Timeout = 300
-    $Timer = 0
-    while ((Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue).State -eq 'Running' -and $Timer -lt $Timeout) {
-        Start-Sleep -Seconds 2
-        $Timer += 2
-    }
-    
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    
-    if (Test-Path $LogPath) {
-        Write-Host "`n--- SYSTEM Task Output ---" -ForegroundColor Cyan
-        Get-Content $LogPath
-    }
-}
-
-# ==============================================================================
-# CHECK: Run as SYSTEM if needed
+# CHECK: Run as SYSTEM if needed. Re-runs this whole script as SYSTEM via the
+# shared Invoke-AsUserTask helper (ScriptPath mode keeps $PSScriptRoot correct),
+# then exits the non-SYSTEM instance.
 # ==============================================================================
 $CurrentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 if ($CurrentUser -ne "NT AUTHORITY\SYSTEM") {
     Write-Host "Running as '$CurrentUser'. Elevating to SYSTEM..." -ForegroundColor Yellow
-    Invoke-AsSystem -ScriptPath $MyInvocation.MyCommand.Definition
+    Invoke-AsUserTask -Name "FixSCCMPermissions_Task" -ScriptPath $MyInvocation.MyCommand.Definition -TimeoutSec 300 | Out-Null
     exit
 }
 
