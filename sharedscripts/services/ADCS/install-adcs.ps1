@@ -8,6 +8,10 @@ $securePassword = ConvertTo-SecureString $forest.administratorPassword -AsPlainT
 $username = $forest.netbiosName + "\Administrator"
 $domainAdminCredentials = New-Object System.Management.Automation.PSCredential($username, $securePassword)
 
+# Helper to run blocks under a real domain-admin logon token (scheduled task).
+# Needed for AD writes that the local WinRM identity cannot perform.
+. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
+
 
 Write-Host "[*] Installing ADCS with Certification Authority and Web Enrollment features......\n\n"
 
@@ -116,42 +120,45 @@ if (-not (Get-Module -Name ADCSTemplate)) {
 }
 
 
-# Create vulnerable templates using ADCSTemplate
+# Create vulnerable templates using ADCSTemplate.
+# New-ADCSTemplate / Set-ADCSTemplateACL write into AD (CN=Certificate Templates,
+# CN=Public Key Services,CN=Services,CN=Configuration,...), which the local WinRM
+# identity cannot do ("Access is denied"). Run the loop under a real domain-admin
+# logon token via a one-shot scheduled task. The task runs locally on this box, so
+# the ADCSTemplate module and JSON files (all under C:\vagrant) are available.
+# Note: ESC5-ESC8 are CA-level misconfigurations applied after template import (see Step 5 below)
 Write-Host "#### Step 4:Creating vulnerable certificate templates..."
 
-    # Array of template configurations
-    $templates = @(
-        @{DisplayName = "ESC1_VulnerableTemplate"; JsonPath = "C:\vagrant\sharedscripts\services\ADCS\ESC1_VulnerableTemplate.json"},
-        @{DisplayName = "ESC2_VulnerableTemplate"; JsonPath = "C:\vagrant\sharedscripts\services\ADCS\ESC2_VulnerableTemplate.json"},
-        @{DisplayName = "ESC3_VulnerableTemplate"; JsonPath = "C:\vagrant\sharedscripts\services\ADCS\ESC3_VulnerableTemplate.json"},
-        @{DisplayName = "ESC4_VulnerableTemplate"; JsonPath = "C:\vagrant\sharedscripts\services\ADCS\ESC4_VulnerableTemplate.json"}
-    )
-    # Note: ESC5-ESC8 are CA-level misconfigurations applied after template import (see Step 5 below)
+$templateScript = @'
+Import-Module ActiveDirectory -Force
+Import-Module "C:\vagrant\sharedscripts\services\ADCS\ADCSTemplate\ADCSTemplate.psm1" -Force
 
+$templates = @(
+    @{DisplayName = "ESC1_VulnerableTemplate"; JsonPath = "C:\vagrant\sharedscripts\services\ADCS\ESC1_VulnerableTemplate.json"},
+    @{DisplayName = "ESC2_VulnerableTemplate"; JsonPath = "C:\vagrant\sharedscripts\services\ADCS\ESC2_VulnerableTemplate.json"},
+    @{DisplayName = "ESC3_VulnerableTemplate"; JsonPath = "C:\vagrant\sharedscripts\services\ADCS\ESC3_VulnerableTemplate.json"},
+    @{DisplayName = "ESC4_VulnerableTemplate"; JsonPath = "C:\vagrant\sharedscripts\services\ADCS\ESC4_VulnerableTemplate.json"}
+)
 
-
-    foreach ($template in $templates) {
-        try {
-            # Check if the template already exists
-            $existingTemplate = Get-ADCSTemplate -DisplayName $template.DisplayName -ErrorAction SilentlyContinue
-            if ($existingTemplate) {
-                Write-Host "[*] Template '$($template.DisplayName)' already exists. Skipping creation."
-            } else {
-                # Create new template
-                Write-Host "[*] Creating template '$($template.DisplayName)'..."
-                New-ADCSTemplate -DisplayName $template.DisplayName -JSON (Get-Content $template.JsonPath -Raw) -Publish -ErrorAction Stop
-            }
-
-            # Set ACLs for the template
-            Write-Host "[*] Setting ACLs for '$($template.DisplayName)'..."
-            Set-ADCSTemplateACL -DisplayName $template.DisplayName -Identity "SILENT\Domain Users" -Type Allow -Enroll -AutoEnroll -ErrorAction Stop
-        }
-        catch {
-            Write-Host "[!] Error processing template '$($template.DisplayName)': $_"
-            # Continue to the next template instead of halting
-            continue
-        }
+foreach ($template in $templates) {
+    $existingTemplate = Get-ADCSTemplate -DisplayName $template.DisplayName -ErrorAction SilentlyContinue
+    if ($existingTemplate) {
+        Write-Host "[*] Template '$($template.DisplayName)' already exists. Skipping creation."
+    } else {
+        Write-Host "[*] Creating template '$($template.DisplayName)'..."
+        New-ADCSTemplate -DisplayName $template.DisplayName -JSON (Get-Content $template.JsonPath -Raw) -Publish -ErrorAction Stop
     }
+    Write-Host "[*] Setting ACLs for '$($template.DisplayName)'..."
+    Set-ADCSTemplateACL -DisplayName $template.DisplayName -Identity "SILENT\Domain Users" -Type Allow -Enroll -AutoEnroll -ErrorAction Stop
+}
+'@
+
+$tplUser = "$($forest.netbiosName)\Administrator"
+if (Invoke-AsUserTask -Name "CreateAdcsTemplates" -ScriptContent $templateScript -User $tplUser -Password $forest.administratorPassword -TimeoutSec 180) {
+    Write-Host "[+] Vulnerable templates created and published." -ForegroundColor Green
+} else {
+    Write-Host "[!] Template creation task failed or timed out (see log above)." -ForegroundColor Red
+}
 
 # # Define commands to run as admin
 # $commands = {

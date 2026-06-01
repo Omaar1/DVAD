@@ -20,33 +20,43 @@ if (-not $caName) { $caName = "SILENT-CA" }
 
 Write-Host "[*] CA Name: $caName" -ForegroundColor Cyan
 
+# Domain-admin credentials for AD writes. ESC5 writes an ACE onto the CA object in
+# the Configuration NC, which the local WinRM identity cannot do. We run that block
+# under a real logon token via a one-shot scheduled task (see Invoke-AsUserTask.ps1).
+. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
+$forest = Get-Content -Raw -Path "C:\vagrant\provision\variables\forest-variables.json" | ConvertFrom-Json
+$escUser = "$($forest.netbiosName)\Administrator"
+
 # ============================================================
 # ESC5: GenericAll on the CA object in AD for l.garcia
 # ============================================================
 Write-Host "`n[*] === ESC5: GenericAll on CA AD object for l.garcia ===" -ForegroundColor Cyan
 
-try {
-    Import-Module ActiveDirectory -ErrorAction Stop
-    $domainDN  = (Get-ADDomain).DistinguishedName
-    $domainDNS = (Get-ADDomain).DNSRoot
+# Runs as domain admin via scheduled task on this box. It reads $caName from the
+# local CertSvc registry itself (single-quoted here-string: nothing expands here).
+$esc5Script = @'
+Import-Module ActiveDirectory -ErrorAction Stop
+$caName     = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration" -Name Active).Active
+$domainDN   = (Get-ADDomain).DistinguishedName
+$caObjectDN = "CN=$caName,CN=Enrollment Services,CN=Public Key Services,CN=Services,CN=Configuration,$domainDN"
+$user       = Get-ADUser -Identity "l.garcia" -ErrorAction Stop
 
-    $caObjectDN = "CN=$caName,CN=Enrollment Services,CN=Public Key Services,CN=Services,CN=Configuration,$domainDN"
-    $user       = Get-ADUser -Identity "l.garcia" -ErrorAction Stop
-    $userSID    = $user.SID
+$target  = [ADSI]"LDAP://$caObjectDN"
+$sid     = New-Object System.Security.Principal.SecurityIdentifier($user.SID)
+$ace     = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+    $sid,
+    [System.DirectoryServices.ActiveDirectoryRights]::GenericAll,
+    [System.Security.AccessControl.AccessControlType]::Allow,
+    [System.DirectoryServices.ActiveDirectorySecurityInheritance]::None)
+$target.psbase.ObjectSecurity.AddAccessRule($ace)
+$target.psbase.CommitChanges()
+Write-Host "[+] l.garcia: GenericAll on CA AD object ($caName)"
+'@
 
-    $target  = [ADSI]"LDAP://$caObjectDN"
-    $sid     = New-Object System.Security.Principal.SecurityIdentifier($userSID)
-    $allow   = [System.Security.AccessControl.AccessControlType]::Allow
-    $rights  = [System.DirectoryServices.ActiveDirectoryRights]::GenericAll
-    $inherit = [System.DirectoryServices.ActiveDirectorySecurityInheritance]::None
-    $ace     = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, $rights, $allow, $inherit)
-
-    $acl = $target.psbase.ObjectSecurity
-    $acl.AddAccessRule($ace)
-    $target.psbase.CommitChanges()
-    Write-Host "[+] l.garcia: GenericAll on CA AD object ($caName)" -ForegroundColor Green
-} catch {
-    Write-Host "[!] ESC5 configuration failed: $_" -ForegroundColor Red
+if (Invoke-AsUserTask -Name "ConfigureEsc5" -ScriptContent $esc5Script -User $escUser -Password $forest.administratorPassword -TimeoutSec 120) {
+    Write-Host "[+] ESC5 configured (l.garcia has GenericAll on the CA object)." -ForegroundColor Green
+} else {
+    Write-Host "[!] ESC5 configuration failed (see log above)." -ForegroundColor Red
 }
 
 # ============================================================
