@@ -3,15 +3,16 @@
 # Must run AFTER all VMs have joined the domain.
 # Called from server1 (SVR1) provisioner as the last provisioning step.
 
-param(
-    [string]$ParentdomainVariables
-)
-
-$domain   = Get-Content -Raw -Path "C:\vagrant\provision\variables\${ParentdomainVariables}" | ConvertFrom-Json
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$cfg      = Get-LabConfig
+$domain   = $cfg.domain
 $username = $domain.netbiosName + "\Administrator"
 $password = $domain.administratorPassword
 
 . C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+
+Start-PhaseTimer -PhaseName "MACHINE ATTACK PATHS (delegation, RBCD, LAPS)"
 
 # Ensure RSAT AD module is available (server1 may not have it yet)
 if (-not (Get-WindowsFeature RSAT-AD-PowerShell).Installed) {
@@ -24,6 +25,8 @@ Import-Module ActiveDirectory -ErrorAction Stop
 
 $domainDN  = (Get-ADDomain).DistinguishedName
 $domainDNS = (Get-ADDomain).DNSRoot
+$dcHost    = (Get-ADDomain).PDCEmulator      # e.g. ROOTDC.silent.run
+$dcShort   = $dcHost.Split('.')[0]           # e.g. ROOTDC
 
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host " Configuring Machine-Dependent Attack Paths" -ForegroundColor Cyan
@@ -50,16 +53,16 @@ if ($svr1) {
 # svc_web can delegate to CIFS/ROOTDC using any auth protocol (S4U2Self).
 # ============================================================================
 Write-Host ""
-Write-Host "[Chain 6b] Constrained Delegation (svc_web -> CIFS/ROOTDC)" -ForegroundColor Green
+Write-Host "[Chain 6b] Constrained Delegation (svc_web -> CIFS/$dcShort)" -ForegroundColor Green
 
 Set-ADUser "svc_web" -Add @{
     'msDS-AllowedToDelegateTo' = @(
-        "CIFS/ROOTDC.$domainDNS",
-        "CIFS/ROOTDC"
+        "CIFS/$dcHost",
+        "CIFS/$dcShort"
     )
 }
 Set-ADAccountControl -Identity "svc_web" -TrustedToAuthForDelegation $true
-Write-Host "  [DELEG] svc_web: Constrained Delegation to CIFS/ROOTDC (protocol transition)" -ForegroundColor Yellow
+Write-Host "  [DELEG] svc_web: Constrained Delegation to CIFS/$dcShort (protocol transition)" -ForegroundColor Yellow
 
 # ============================================================================
 # CHAIN 6c: RBCD — l.garcia has GenericWrite on ADCS computer object
@@ -117,7 +120,7 @@ Write-Host " Machine Attack Paths Configured" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host " 6a: Unconstrained Delegation   SVR1 (TrustedForDelegation)" -ForegroundColor White
-Write-Host " 6b: Constrained Delegation     svc_web -> CIFS/ROOTDC (protocol transition)" -ForegroundColor White
+Write-Host " 6b: Constrained Delegation     svc_web -> CIFS/$dcShort (protocol transition)" -ForegroundColor White
 Write-Host " 6c: RBCD                       l.garcia GenericWrite on ADCS$" -ForegroundColor White
 Write-Host " 7:  LAPS AllExtendedRights     t.brown -> SVR1$ (reads ms-Mcs-AdmPwd)" -ForegroundColor White
 '@
@@ -130,3 +133,6 @@ if (Invoke-AsUserTask -Name "MachineAttacks" -ScriptContent $innerScript -User $
 }
 
 Write-Host "[+] configure-machine-attacks.ps1 complete"
+
+Stop-PhaseTimer -Status Success
+Show-InstallationSummary

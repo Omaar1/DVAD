@@ -7,7 +7,7 @@
 $ErrorActionPreference = "Stop"
 
 # Import Phase Timer Module
-Import-Module "$PSScriptRoot\PhaseTimer.psm1" -Force
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
 
 # --- PART 1: NETWORK SETUP (GO ONLINE) ---
 Start-PhaseTimer -PhaseName "CONFIGURING NETWORK FOR INTERNET"

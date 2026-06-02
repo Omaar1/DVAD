@@ -2,16 +2,18 @@
 # Post-provisioning health check for SilentRUN-Lab.
 # Tests IP reachability, WinRM connectivity, and key service status.
 
+. "$PSScriptRoot\sharedscripts\Get-LabConfig.ps1"
+$cfg = Get-LabConfig
+
 $vms = @(
-    @{ Name = "RootDC";      IP = "10.10.10.100"; Services = @("ADWS", "DNS", "Netlogon", "NTDS") },
-    @{ Name = "ADCS_server"; IP = "10.10.10.103"; Services = @("CertSvc", "W3SVC") },
-    @{ Name = "SCCM_server"; IP = "10.10.10.104"; Services = @("SMS_Executive", "MSSQLSERVER", "W3SVC") },
-    @{ Name = "SVR1";        IP = "10.10.10.150"; Services = @("Workstation") }
+    @{ Name = "RootDC";      IP = $cfg.hosts.rootdc.ip; Services = @("ADWS", "DNS", "Netlogon", "NTDS") },
+    @{ Name = "ADCS_server"; IP = $cfg.hosts.adcs.ip;   Services = @("CertSvc", "W3SVC") },
+    @{ Name = "SCCM_server"; IP = $cfg.hosts.sccm.ip;   Services = @("SMS_Executive", "MSSQLSERVER", "W3SVC") },
+    @{ Name = "SVR1";        IP = $cfg.hosts.svr1.ip;   Services = @("Workstation") }
 )
 
-$domain = Get-Content -Raw -Path "provision\variables\forest-variables.json" | ConvertFrom-Json
-$pass   = ConvertTo-SecureString $domain.administratorPassword -AsPlainText -Force
-$cred   = New-Object System.Management.Automation.PSCredential("$($domain.netbiosName)\Administrator", $pass)
+$pass   = ConvertTo-SecureString $cfg.domain.administratorPassword -AsPlainText -Force
+$cred   = New-Object System.Management.Automation.PSCredential("$($cfg.domain.netbiosName)\Administrator", $pass)
 
 $allOk = $true
 

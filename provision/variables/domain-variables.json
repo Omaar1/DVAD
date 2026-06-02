@@ -1,9 +1,0 @@
-{
-  "name": "something",
-  "fqdn": "something.silent.run",
-  "netbiosName": "SOMETHING",
-  "dn": "DC=something,DC=silent,DC=run",
-  "administratorPassword": "P@ssw0rd",
-  "safeModeAdministratorPassword": "P@ssw0rd",
-  "dcIPAddress": "10.10.10.101"
-}

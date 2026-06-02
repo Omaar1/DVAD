@@ -21,19 +21,22 @@ param(
 # ==============================================================================
 
 # --- IMPORT PHASE TIMER MODULE ---
-$TimerModule = "$PSScriptRoot\PhaseTimer.psm1"
+$TimerModule = "C:\vagrant\sharedscripts\PhaseTimer.psm1"
 if (Test-Path $TimerModule) { Import-Module $TimerModule -Force -ErrorAction SilentlyContinue } 
 
 # --- CONFIGURATION VARIABLES ---
-$SiteCode = "PS1"
-$SiteServer = "SCCM.silent.run"
-$BoundaryIP = "10.10.10.0"
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$cfg = Get-LabConfig
+$netbios = $cfg.domain.netbiosName
+$SiteCode = $cfg.sccm.siteCode
+$SiteServer = "$($cfg.hosts.sccm.name).$($cfg.domain.fqdn)"
+$BoundaryIP = $cfg.network.subnet
 $BoundaryName = "Lab Subnet"
-$Group = "Lab Boundary Group"   
-$NAA_User = "SILENT\sccm_naa"
-$NAA_Pass = "P@ssw0rd"
-$TargetAdminUser = "SILENT\Administrator"
-$TargetAdminPass = "P@ssw0rd"
+$Group = "Lab Boundary Group"
+$NAA_User = "$netbios\$($cfg.sccm.accounts.networkAccess)"
+$NAA_Pass = $cfg.sccm.accountPassword
+$TargetAdminUser = "$netbios\Administrator"
+$TargetAdminPass = $cfg.domain.administratorPassword
 
 # ==============================================================================
 # NAA EXECUTION MODE (Called via Scheduled Task as SILENT\Administrator)
@@ -42,50 +45,16 @@ if ($NAAExecutionMode) {
     Start-Transcript -Path "C:\CRED1_NAA_Exec_Log.txt" -Force
     Write-Host "--- NAA SUB-PROCESS STARTED ---" -ForegroundColor Cyan
     
-    # 1. Load Module (with fallback paths)
-    $ConsolePath = $null
-    $RegKey = "HKLM:\SOFTWARE\Microsoft\ConfigMgr10\Setup"
-    
-    if (Test-Path $RegKey) {
-        $InstallDir = (Get-ItemProperty -Path $RegKey -Name "UI Installation Directory" -ErrorAction SilentlyContinue)."UI Installation Directory"
-        if ($InstallDir) {
-            $ConsolePath = Join-Path $InstallDir "bin\ConfigurationManager.psd1"
-        }
+    # 1. Load module + connect to site
+    try {
+        . C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+        Connect-CMSite -SiteCode $SiteCode -SiteServer $SiteServer
     }
-    
-    # Fallback: Check Standard Paths if registry lookup fails
-    if (-not $ConsolePath -or -not (Test-Path $ConsolePath)) {
-        $PossiblePaths = @(
-            "$($Env:SMS_ADMIN_UI_PATH)\..\ConfigurationManager.psd1",
-            "C:\Program Files (x86)\Microsoft Endpoint Manager\AdminConsole\bin\ConfigurationManager.psd1",
-            "C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1",
-            "C:\Program Files\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1"
-        )
-        $ConsolePath = $PossiblePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-    }
-    
-    if ($ConsolePath -and (Test-Path $ConsolePath)) {
-        Write-Host " [INFO] Loading module from: $ConsolePath" -ForegroundColor Gray
-        Import-Module $ConsolePath -ErrorAction Stop
-    }
-    else {
-        Write-Error "Could not locate ConfigurationManager.psd1 in any standard location."
+    catch {
+        Write-Error $_
         Stop-Transcript
         exit 1
     }
-    
-    # Verify module loaded correctly
-    if (-not (Get-Module -Name ConfigurationManager)) {
-        Write-Error "ConfigurationManager module failed to load."
-        Stop-Transcript
-        exit 1
-    }
-    
-    # 2. Connect to Site
-    if ($null -eq (Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue)) {
-        New-PSDrive -Name $SiteCode -PSProvider CMSite -Root $SiteServer -ErrorAction Stop | Out-Null
-    }
-    Set-Location "$($SiteCode):"
 
     # 3. Configure NAA (WMI)
     try {
@@ -134,51 +103,8 @@ if ($NAAExecutionMode) {
 # ==============================================================================
 
 # INITIALIZATION: LOAD MODULE & CONNECT TO SITE
-Write-Host "--- INITIALIZING SCCM MODULE ---" -ForegroundColor Cyan
-try {
-    # 1. Locate ConfigurationManager.psd1 via Registry
-    $RegKey = "HKLM:\SOFTWARE\Microsoft\ConfigMgr10\Setup"
-    $ConsolePath = $null
-    
-    if (Test-Path $RegKey) {
-        $InstallDir = (Get-ItemProperty -Path $RegKey -Name "UI Installation Directory" -ErrorAction SilentlyContinue)."UI Installation Directory"
-        if ($InstallDir) {
-            $ConsolePath = Join-Path $InstallDir "bin\ConfigurationManager.psd1"
-        }
-    }
-
-    # 2. Fallback: Check Standard Paths if registry lookup fails
-    if (-not $ConsolePath -or -not (Test-Path $ConsolePath)) {
-        $PossiblePaths = @(
-            "$($Env:SMS_ADMIN_UI_PATH)\..\ConfigurationManager.psd1",
-            "C:\Program Files (x86)\Microsoft Endpoint Manager\AdminConsole\bin\ConfigurationManager.psd1",
-            "C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1",
-            "C:\Program Files\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1"
-        )
-        $ConsolePath = $PossiblePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-    }
-
-    # 3. Load the Module
-    if ($ConsolePath -and (Test-Path $ConsolePath)) {
-        Write-Host " [INFO] Found Module at: $ConsolePath" -ForegroundColor Gray
-        Import-Module $ConsolePath -ErrorAction Stop
-    }
-    else {
-        Throw "Could not locate ConfigurationManager.psd1 in any standard location."
-    }
-
-    # 4. Connect to Site
-    if ((Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue) -eq $null) {
-        New-PSDrive -Name $SiteCode -PSProvider CMSite -Root $SiteServer -ErrorAction Stop | Out-Null
-    }
-    Set-Location "$($SiteCode):"
-    Write-Host " [OK] Connected to Site $SiteCode" -ForegroundColor Green
-
-}
-catch {
-    Write-Error "Failed to load SCCM Module: $_"
-    exit 1
-}
+. C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+Connect-CMSite -SiteCode $SiteCode -SiteServer $SiteServer
 
 # ==============================================================================
 # PHASE 1: SITE INSECURITY CONFIGURATION
@@ -240,9 +166,9 @@ try {
     # FQDN to the lab NIC and deprioritize ::1 so IPv4 wins. Idempotent.
     # --------------------------------------------------------------------------
     Write-Host " [INFO] Pinning site server name to lab NIC..." -ForegroundColor Gray
-    $SiteFqdn  = "SCCM.silent.run"
-    $SiteHost  = "SCCM"
-    $LabIP     = "10.10.10.104"
+    $SiteFqdn  = $SiteServer
+    $SiteHost  = $cfg.hosts.sccm.name
+    $LabIP     = $cfg.hosts.sccm.ip
     $hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
 
     (Get-Content $hostsFile) -notmatch [regex]::Escape($SiteFqdn) | Set-Content $hostsFile -Encoding ASCII
@@ -598,4 +524,6 @@ else {
     Write-Host " [FAIL] Collection not found" -ForegroundColor Red; $AllGood = $false
 }
 
-Write-Host "`n[COMPLETE] Domain: silent.run | NAA: $NAA_User" -ForegroundColor Magenta
+Write-Host "`n[COMPLETE] Domain: $($cfg.domain.fqdn) | NAA: $NAA_User" -ForegroundColor Magenta
+
+Show-InstallationSummary

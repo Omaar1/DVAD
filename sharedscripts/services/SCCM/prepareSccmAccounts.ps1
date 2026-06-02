@@ -1,42 +1,25 @@
-param(
-    [string]$ParentdomainVariables
-)
-
 $ErrorActionPreference = "Stop"
 
 # Import Phase Timer Module
-Import-Module "$PSScriptRoot\PhaseTimer.psm1" -Force
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
 
 # --- 1. READ VARIABLES ---
 Start-PhaseTimer -PhaseName "LOADING CONFIGURATION"
-$jsonPath = "C:\vagrant\provision\variables\${ParentdomainVariables}"
-Write-Host "DEBUG: JSON Path is: $jsonPath"
-
-if (-not (Test-Path $jsonPath)) {
-    Stop-PhaseTimer -Status Failed
-    Write-Error "DEBUG: File does not exist!"
-    exit 1
-}
-
-$rawContent = Get-Content -Raw -Path $jsonPath
-try {
-    $domainConfig = $rawContent | ConvertFrom-Json
-}
-catch {
-    Stop-PhaseTimer -Status Failed
-    Write-Error "DEBUG: JSON Conversion Failed: $_"
-    exit 1
-}
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$cfg          = Get-LabConfig
+$domainConfig = $cfg.domain
+$SccmAccounts = $cfg.sccm.accounts
+$SccmAcctPass = $cfg.sccm.accountPassword
 
 # --- 2. SETUP CREDENTIALS ---
 $AdminPassRaw = $domainConfig.administratorPassword
 $securePassword = ConvertTo-SecureString $AdminPassRaw -AsPlainText -Force
-$username = $domainConfig.netbiosName + "\Administrator" 
+$username = $domainConfig.netbiosName + "\Administrator"
 $domainAdminCredentials = New-Object System.Management.Automation.PSCredential($username, $securePassword)
 
-$DomainName = $domainConfig.fqdn 
-$DomainDN = $domainConfig.dn     
-$SchemaMaster = "rootdc.silent.run" # Adjust if your DC hostname differs
+$DomainName = $domainConfig.fqdn
+$DomainDN = $domainConfig.dn
+$SchemaMaster = "$($domainConfig.dcName).$($domainConfig.fqdn)"  # e.g. ROOTDC.silent.run
 
 Write-Host "Configuration Loaded:" -ForegroundColor Cyan
 Write-Host " - Domain: $DomainName"
@@ -61,7 +44,8 @@ $remoteScriptBlock = {
         [string]$SCCMComputerName,
         [string]$Password,
         [string]$DomainDN,
-        [string]$DomainFQDN
+        [string]$DomainFQDN,
+        [object]$Accounts
     )
 
     Import-Module ActiveDirectory
@@ -86,18 +70,18 @@ $remoteScriptBlock = {
         }
     }
 
-    New-SccmUser "SCCMAdmin" "SCCM Administrator"
-    New-SccmUser "sqlSrvAgent" "SQL Server Agent"
-    New-SccmUser "sccm_naa" "SCCM Network Access Account"
-    New-SccmUser "sccm_cpia" "SCCM Client Push Install Account"
-    New-SccmUser "sccm_dja" "SCCM OSD Domain Join Account"
+    New-SccmUser $Accounts.admin "SCCM Administrator"
+    New-SccmUser $Accounts.sqlAgent "SQL Server Agent"
+    New-SccmUser $Accounts.networkAccess "SCCM Network Access Account"
+    New-SccmUser $Accounts.clientPush "SCCM Client Push Install Account"
+    New-SccmUser $Accounts.domainJoin "SCCM OSD Domain Join Account"
 
     # Create Group
     if (-not (Get-ADGroup -Filter "Name -eq 'SCCM Admins Group'")) {
         New-ADGroup -Name "SCCM Admins Group" -GroupScope Global -Path $OUPath -Description "SCCM Admins"
         Write-Host "Created Group: SCCM Admins Group"
     }
-    Add-ADGroupMember -Identity "SCCM Admins Group" -Members "SCCMAdmin" -ErrorAction SilentlyContinue
+    Add-ADGroupMember -Identity "SCCM Admins Group" -Members $Accounts.admin -ErrorAction SilentlyContinue
 
     # [TASK B] SYSTEM MANAGEMENT CONTAINER & PERMISSIONS
     $SystemDN = "CN=System,$DomainDN"
@@ -186,7 +170,7 @@ $remoteScriptBlock = {
 Start-PhaseTimer -PhaseName "AD PREPARATION & SCHEMA EXTENSION"
 Write-Host "Executing AD Prep & Schema Extension on DC..." -ForegroundColor Cyan
 try {
-    Invoke-Command -ComputerName $SchemaMaster -Credential $domainAdminCredentials -ScriptBlock $remoteScriptBlock -ArgumentList $env:COMPUTERNAME, $AdminPassRaw, $DomainDN, $DomainName
+    Invoke-Command -ComputerName $SchemaMaster -Credential $domainAdminCredentials -ScriptBlock $remoteScriptBlock -ArgumentList $env:COMPUTERNAME, $SccmAcctPass, $DomainDN, $DomainName, $SccmAccounts
     Stop-PhaseTimer -Status Success
 }
 catch {
@@ -201,10 +185,10 @@ try {
     $DomainNetBIOS = $domainConfig.netbiosName
     
     try {
-        $LocalGroup.Add("WinNT://$DomainNetBIOS/SCCMAdmin,user")
-        Write-Host "Added SCCMAdmin to Local Administrators."
+        $LocalGroup.Add("WinNT://$DomainNetBIOS/$($SccmAccounts.admin),user")
+        Write-Host "Added $($SccmAccounts.admin) to Local Administrators."
     }
-    catch { Write-Host "SCCMAdmin likely already a local admin." }
+    catch { Write-Host "$($SccmAccounts.admin) likely already a local admin." }
     Stop-PhaseTimer -Status Success
 }
 catch {

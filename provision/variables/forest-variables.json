@@ -1,9 +1,0 @@
-{
-    "name": "silent.run",
-    "fqdn": "silent.run",
-    "netbiosName": "SILENT",
-    "dn": "DC=silent,DC=run",
-    "administratorPassword": "P@ssw0rd",
-    "safeModeAdministratorPassword": "P@ssw0rd",
-    "dcIPAddress": "10.10.10.100"
-}

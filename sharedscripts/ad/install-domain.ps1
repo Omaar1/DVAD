@@ -1,10 +1,9 @@
-param(
-    [string]$domainVariables,
-    [string]$parentDomainVariables
-)
-
-$domain = Get-Content -Raw -Path "C:\vagrant\provision\variables\domain-variables.json" | ConvertFrom-Json
-$parent = Get-Content -Raw -Path "C:\vagrant\provision\variables\forest-variables.json" | ConvertFrom-Json
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$cfg      = Get-LabConfig
+$domain   = $cfg.childDomain
+$parent   = $cfg.domain
+$childIp  = $cfg.hosts.childdc.ip
+$parentIp = $cfg.hosts.rootdc.ip
 
 # Identify the lab IP/NIC positively by subnet (deterministic, provider-agnostic).
 # Per-NIC policy (IPv6 off, metrics, NAT kept out of DNS) is applied in provision-base.
@@ -17,10 +16,10 @@ Set-NetAdapterBinding -InterfaceAlias $domainName -ComponentID 'ms_tcpip6' -Enab
 
 echo ' ############### Configure DNS properly ###############'
 # Configure DNS to point to parent DC
-$adapter = Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object { $_.IPAddress -contains $domain.dcIPAddress }
+$adapter = Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object { $_.IPAddress -contains $childIp }
 if ($adapter) {
     # Set parent DC as primary DNS
-    $adapter.SetDNSServerSearchOrder(@($parent.dcIPAddress))
+    $adapter.SetDNSServerSearchOrder(@($parentIp))
     Write-Host "DNS successfully configured to use parent DC"
 } else {
     Write-Host "Failed to configure DNS - adapter not found"
@@ -48,7 +47,7 @@ while (-not $resolved -and $attempt -lt $maxAttempts) {
     
     try {
         $result = Resolve-DnsName -Name $parent.name -ErrorAction Stop
-        if ($result.IPAddress -eq $parent.dcIPAddress) {
+        if ($result.IPAddress -eq $parentIp) {
             $resolved = $true
             Write-Host "Successfully resolved parent DC"
         }
@@ -64,8 +63,8 @@ if (-not $resolved) {
 }
 
 $hostEntries = @(
-    @{IPAddress = $parent.dcIPAddress; Hostname = $parent.name},
-    @{IPAddress = $domain.dcIPAddress; Hostname = $domain.name}
+    @{IPAddress = $parentIp; Hostname = $parent.name},
+    @{IPAddress = $childIp; Hostname = $domain.name}
 )
 
 # Path to the hosts file

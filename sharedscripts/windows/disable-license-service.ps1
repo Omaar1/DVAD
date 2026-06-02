@@ -1,3 +1,6 @@
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Start-PhaseTimer -PhaseName "DISABLE LICENSE SERVICE"
+
 # Define the path to PsExec executable
 $psexecPath = "C:\vagrant\sharedscripts\windows\psexec64.exe"
 
@@ -18,3 +21,6 @@ if (Test-Path $psexecPath) {
 } else {
     Write-Host "PsExec not found at $psexecPath. Please check the path and try again." -ForegroundColor Red
 }
+
+Stop-PhaseTimer -Status Success
+Show-InstallationSummary

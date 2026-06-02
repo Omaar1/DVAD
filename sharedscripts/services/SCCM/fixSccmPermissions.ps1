@@ -24,14 +24,17 @@
 $ErrorActionPreference = "Stop"
 
 # Import Phase Timer Module
-Import-Module "$PSScriptRoot\PhaseTimer.psm1" -Force
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
 . C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
 
 # --- CONFIGURATION ---
-$SiteCode = "PS1"
+$cfg = Get-LabConfig
+$netbios = $cfg.domain.netbiosName
+$SiteCode = $cfg.sccm.siteCode
 $ProviderMachineName = $Env:COMPUTERNAME
-$ProviderFQDN = "SCCM.silent.run"
-$TargetUsers = @("SILENT\Administrator", "SILENT\SCCMAdmin")
+$ProviderFQDN = "$($cfg.hosts.sccm.name).$($cfg.domain.fqdn)"
+$TargetUsers = @("$netbios\Administrator", "$netbios\$($cfg.sccm.accounts.admin)")
 $AdminConsoleBin = "C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin"
 $MediaPath = "C:\vagrant\sharedscripts\services\SCCM\MECM_Setup\Media"
 
@@ -118,18 +121,10 @@ try {
     if (-not $env:SMS_ADMIN_UI_PATH) {
         $env:SMS_ADMIN_UI_PATH = $AdminConsoleBin
     }
-    
-    Import-Module $ModulePath -Force -ErrorAction Stop
-    Write-Host " [OK] SCCM Module loaded." -ForegroundColor Green
-    
-    if (-not (Get-PSDrive -Name $SiteCode -ErrorAction SilentlyContinue)) {
-        New-PSDrive -Name $SiteCode -PSProvider "CMSite" -Root $ProviderFQDN | Out-Null
-    }
-    
-    Set-Location "${SiteCode}:"
-    Write-Host " [OK] Connected to site '$SiteCode'." -ForegroundColor Green
+
+    . C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+    Connect-CMSite -SiteCode $SiteCode -SiteServer $ProviderFQDN
     Stop-PhaseTimer -Status Success
-    
 }
 catch {
     Stop-PhaseTimer -Status Failed

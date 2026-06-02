@@ -15,8 +15,11 @@
     Called from install-adcs.ps1 after ESC1-4 template creation.
 #>
 
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$forest = (Get-LabConfig).domain
+
 $caName = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration" -Name Active -ErrorAction SilentlyContinue).Active
-if (-not $caName) { $caName = "SILENT-CA" }
+if (-not $caName) { $caName = "$($forest.netbiosName)-CA" }
 
 Write-Host "[*] CA Name: $caName" -ForegroundColor Cyan
 
@@ -24,7 +27,6 @@ Write-Host "[*] CA Name: $caName" -ForegroundColor Cyan
 # the Configuration NC, which the local WinRM identity cannot do. We run that block
 # under a real logon token via a one-shot scheduled task (see Invoke-AsUserTask.ps1).
 . C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
-$forest = Get-Content -Raw -Path "C:\vagrant\provision\variables\forest-variables.json" | ConvertFrom-Json
 $escUser = "$($forest.netbiosName)\Administrator"
 
 # ============================================================

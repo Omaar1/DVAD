@@ -6,6 +6,9 @@ if (!$zone) {
     $zone = "en-US"
 }
 
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Start-PhaseTimer -PhaseName "BASE OS CONFIGURATION"
+
 #This script is used to setup the base image. We essentially perform the following:
 # 1. Set keyboard layout and timezone (Default is UK)
 # 3. Create a scheduled task to set the DNS of the system
@@ -59,4 +62,7 @@ sc.exe stop wuauserv
 # display the status again, because we're paranoid
 sc.exe query wuauserv
 # double check it's REALLY disabled - Start value should be 0x4
-REG.exe QUERY HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\wuauserv /v Start 
+REG.exe QUERY HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\wuauserv /v Start
+
+Stop-PhaseTimer -Status Success
+Show-InstallationSummary 

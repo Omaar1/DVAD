@@ -220,10 +220,11 @@ SilentRUN-Lab/
 ├── SilentRUN_Lab_Guide.md                   # Detailed lab notes and attack context
 ├── provision/
 │   └── variables/
-│       ├── forest-variables.json            # Domain config (name, password, DC IP)
+│       ├── lab-config.json                  # Single source of truth: domain, hosts/IPs, box, SCCM settings
 │       ├── lab-users.json                   # OUs, groups, departmental users + service accounts
 │       └── dns_entries.csv                  # DNS records
 └── sharedscripts/
+    ├── Get-LabConfig.ps1                    # Loads lab-config.json (dot-source, then Get-LabConfig)
     ├── ps.ps1                               # PowerShell execution wrapper
     ├── ad/
     │   ├── install-forest.ps1               # Forest and root domain setup

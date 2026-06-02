@@ -6,9 +6,11 @@
 # ==============================================================================
 
 # --- CONFIGURATION ---
-$SiteCode = "PS1"                      # Your Site Code
-$SiteServer = "SCCM.silent.run"     # Your Site Server FQDN
-$DPName = "SCCM.silent.run"     # DP to distribute to
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$cfg = Get-LabConfig
+$SiteCode = $cfg.sccm.siteCode                          # Site Code (from lab-config.json)
+$SiteServer = "$($cfg.hosts.sccm.name).$($cfg.domain.fqdn)"  # Site Server FQDN
+$DPName = $SiteServer                                    # DP to distribute to
 $PackageName = "Server Backup Agent Preparation"
 $ProgramName = "Run Pre-Install"
 $SourceDir = "C:\Sources\Packages\BackupAgent" # Local path for source files
@@ -17,20 +19,11 @@ $HardcodedPass = "B@ckup`$2024!Secure"       # The secret we will steal
 # ---------------------
 
 # 1. INITIALIZE SCCM MODULE
-Write-Host "--- SETUP: Loading SCCM Module ---" -ForegroundColor Cyan
-if (-not (Get-Module ConfigurationManager)) {
-    try {
-        Import-Module "$($Env:SMS_ADMIN_UI_PATH)\..\ConfigurationManager.psd1" -ErrorAction Stop
-    }
-    catch {
-        Write-Error "Could not load Configuration Manager module. Run on Site Server."
-        exit
-    }
-}
-if ((Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue) -eq $null) {
-    New-PSDrive -Name $SiteCode -PSProvider CMSite -Root $SiteServer | Out-Null
-}
-Set-Location "$($SiteCode):"
+. C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+Connect-CMSite -SiteCode $SiteCode -SiteServer $SiteServer
+
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Start-PhaseTimer -PhaseName "VULN DP PACKAGE (CRED-4 looting)"
 
 # 2. CREATE VULNERABLE SOURCE FILE
 Write-Host "[*] Creating Source Content at $SourceDir..." -ForegroundColor Yellow
@@ -115,3 +108,6 @@ catch {
 
 Write-Host "`n[SUCCESS] Vulnerability Created." -ForegroundColor Cyan
 Write-Host "Attack Path: Browse \\$DPName\SMSPKGD$ or http://$DPName/SMS_DP_SMSPKG$ to find '$ScriptName'"
+
+Stop-PhaseTimer -Status Success
+Show-InstallationSummary

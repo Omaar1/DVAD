@@ -3,7 +3,8 @@
 # CN=Public Key Services,CN=Services,CN=Configuration,... and needs Enterprise
 # Admins. Without -Credential, the cmdlet fails at set_CAType with
 # 0x80072082 ERROR_DS_RANGE_CONSTRAINT (the DC rejects the operation).
-$forest = Get-Content -Raw -Path "C:\vagrant\provision\variables\forest-variables.json" | ConvertFrom-Json
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$forest = (Get-LabConfig).domain
 $securePassword = ConvertTo-SecureString $forest.administratorPassword -AsPlainText -Force
 $username = $forest.netbiosName + "\Administrator"
 $domainAdminCredentials = New-Object System.Management.Automation.PSCredential($username, $securePassword)
@@ -11,6 +12,9 @@ $domainAdminCredentials = New-Object System.Management.Automation.PSCredential($
 # Helper to run blocks under a real domain-admin logon token (scheduled task).
 # Needed for AD writes that the local WinRM identity cannot perform.
 . C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+
+Start-PhaseTimer -PhaseName "INSTALL ADCS (CA, ESC1-8 templates)"
 
 
 Write-Host "[*] Installing ADCS with Certification Authority and Web Enrollment features......\n\n"
@@ -133,6 +137,8 @@ $templateScript = @'
 Import-Module ActiveDirectory -Force
 Import-Module "C:\vagrant\sharedscripts\services\ADCS\ADCSTemplate\ADCSTemplate.psm1" -Force
 
+$netbios = (Get-ADDomain).NetBIOSName
+
 $templates = @(
     @{DisplayName = "ESC1_VulnerableTemplate"; JsonPath = "C:\vagrant\sharedscripts\services\ADCS\ESC1_VulnerableTemplate.json"},
     @{DisplayName = "ESC2_VulnerableTemplate"; JsonPath = "C:\vagrant\sharedscripts\services\ADCS\ESC2_VulnerableTemplate.json"},
@@ -149,7 +155,7 @@ foreach ($template in $templates) {
         New-ADCSTemplate -DisplayName $template.DisplayName -JSON (Get-Content $template.JsonPath -Raw) -Publish -ErrorAction Stop
     }
     Write-Host "[*] Setting ACLs for '$($template.DisplayName)'..."
-    Set-ADCSTemplateACL -DisplayName $template.DisplayName -Identity "SILENT\Domain Users" -Type Allow -Enroll -AutoEnroll -ErrorAction Stop
+    Set-ADCSTemplateACL -DisplayName $template.DisplayName -Identity "$netbios\Domain Users" -Type Allow -Enroll -AutoEnroll -ErrorAction Stop
 }
 '@
 
@@ -193,5 +199,8 @@ if (Test-Path $esc678Script) {
 } else {
     Write-Host "[!] configure-esc678.ps1 not found at $esc678Script" -ForegroundColor Red
 }
+
+Stop-PhaseTimer -Status Success
+Show-InstallationSummary
 
 

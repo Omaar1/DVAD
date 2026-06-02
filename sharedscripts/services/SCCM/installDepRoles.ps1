@@ -14,7 +14,7 @@
 # ==============================================================================
 
 # Import Phase Timer Module
-Import-Module "$PSScriptRoot\PhaseTimer.psm1" -Force
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
 
 # Start logging
 Start-Transcript -Path "C:\IIS_Install_Log.txt" -Append

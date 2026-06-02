@@ -2,21 +2,25 @@
 # OU is the optional path prefix, e.g. OU=Servers
 #
 param(
-    [string] $domainVariables,
     [string] $ou = "default"
 )
 
-#This script will join the machine to the domain, based on the domain variables and added to the instructed OU
+#This script will join the machine to the domain, based on lab-config.json and added to the instructed OU
 
-$domain = Get-Content -Raw -Path "C:\vagrant\provision\variables\${domainVariables}" | ConvertFrom-Json
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+$cfg    = Get-LabConfig
+$domain = $cfg.domain
+$dcIp   = $cfg.hosts.rootdc.ip
+Start-PhaseTimer -PhaseName "DOMAIN JOIN ($($domain.netbiosName))"
 write-Host "Joining domain: $($domain.netbiosName)"
-write-Host "Domain controller to be used as DNS: $($domain.dcIPAddress)"
+write-Host "Domain controller to be used as DNS: $dcIp"
 echo "Pointing DNS"
 # Point DNS at domain controller
 $adapters = Get-WmiObject Win32_NetworkAdapterConfiguration
 if ($adapters) {
     $adapters | ForEach-Object {
-        $r = $_.SetDNSServerSearchOrder($domain.dcIPAddress)
+        $r = $_.SetDNSServerSearchOrder($dcIp)
         if ($r.ReturnValue -ne 0) {
             Write-Warning "DNS set failed on NIC '$($_.Description)' (code $($r.ReturnValue))"
         }
@@ -34,4 +38,6 @@ echo "Joining computer"
 Add-Computer -DomainName $domain.netbiosName -Credential $domainAdminCredentials @params
 echo "Computer Joined"
 
+Stop-PhaseTimer -Status Success
+Show-InstallationSummary
 exit 0

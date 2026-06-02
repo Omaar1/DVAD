@@ -17,8 +17,13 @@ Import-Module ActiveDirectory -ErrorAction Stop
 $domainDN  = (Get-ADDomain).DistinguishedName
 $domainDNS = (Get-ADDomain).DNSRoot
 
-$adminPw  = (Get-Content -Raw -Path "C:\vagrant\provision\variables\forest-variables.json" | ConvertFrom-Json).administratorPassword
-$netbios  = (Get-Content -Raw -Path "C:\vagrant\provision\variables\forest-variables.json" | ConvertFrom-Json).netbiosName
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+$cfg      = Get-LabConfig
+$adminPw  = $cfg.domain.administratorPassword
+$netbios  = $cfg.domain.netbiosName
+
+Start-PhaseTimer -PhaseName "CONFIGURE ATTACK PATHS (ACLs, Kerberoast, GMSA, LAPS)"
 
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host " Configuring Attack Paths" -ForegroundColor Cyan
@@ -359,3 +364,6 @@ Write-Host ""
 Write-Host " ACL types configured: GenericAll, GenericWrite, WriteDACL, WriteOwner" -ForegroundColor Gray
 Write-Host "                       ForceChangePassword, Self-Membership, AllExtendedRights" -ForegroundColor Gray
 Write-Host "                       DS-Replication-Get-Changes, DS-Replication-Get-Changes-All" -ForegroundColor Gray
+
+Stop-PhaseTimer -Status Success
+Show-InstallationSummary

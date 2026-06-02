@@ -1,8 +1,5 @@
-param(
-    [string]$ParentdomainVariables
-)
-
-$domain = Get-Content -Raw -Path "C:\vagrant\provision\variables\${ParentdomainVariables}" | ConvertFrom-Json
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$domain = (Get-LabConfig).domain
 $securePassword = ConvertTo-SecureString $domain.administratorPassword -AsPlainText -Force
 $username = $domain.netbiosName + "\Administrator" 
 $domainAdminCredentials = New-Object System.Management.Automation.PSCredential($username, $securePassword)

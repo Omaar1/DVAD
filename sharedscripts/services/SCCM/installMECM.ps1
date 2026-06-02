@@ -8,7 +8,7 @@
 $ErrorActionPreference = "Stop"
 
 # Import Phase Timer Module (Ensure this file is clean!)
-Import-Module "$PSScriptRoot\PhaseTimer.psm1" -Force
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
 
 # Preserve ConfigMgrSetup.log to the host-visible share and print its tail so failures are diagnosable.
 function Save-SetupLog {
@@ -25,8 +25,13 @@ function Save-SetupLog {
 }
 
 # --- CONFIGURATION ---
-$SiteCode = "PS1"
-$SiteName = "LabPrimary"
+# NOTE: setup.exe reads the site code/name from ConfigMgrAutoSave.ini. Keep that
+# INI's [Identification] SiteCode in sync with sccm.siteCode in lab-config.json;
+# the values below are used for post-install WMI checks against site_$SiteCode.
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$cfg = Get-LabConfig
+$SiteCode = $cfg.sccm.siteCode
+$SiteName = $cfg.sccm.siteName
 $InstallDir = "C:\Program Files\Microsoft Configuration Manager"
 
 # ---- Getting Server Name ----

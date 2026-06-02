@@ -1,0 +1,47 @@
+{
+  "box": {
+    "name": "StefanScherer/windows_2019",
+    "version": "2018.10.03"
+  },
+  "domain": {
+    "name": "silent.run",
+    "fqdn": "silent.run",
+    "netbiosName": "SILENT",
+    "dn": "DC=silent,DC=run",
+    "administratorPassword": "P@ssw0rd",
+    "safeModeAdministratorPassword": "P@ssw0rd",
+    "dcName": "ROOTDC"
+  },
+  "childDomain": {
+    "name": "something",
+    "fqdn": "something.silent.run",
+    "netbiosName": "SOMETHING",
+    "dn": "DC=something,DC=silent,DC=run",
+    "administratorPassword": "P@ssw0rd",
+    "safeModeAdministratorPassword": "P@ssw0rd",
+    "dcName": "CHILDDC"
+  },
+  "network": {
+    "subnet": "10.10.10.0",
+    "prefix": "10.10.10."
+  },
+  "hosts": {
+    "rootdc": { "name": "ROOTDC", "ip": "10.10.10.100", "cpus": 2, "memory": 2048 },
+    "childdc": { "name": "CHILDDC", "ip": "10.10.10.101", "cpus": 2, "memory": 4096 },
+    "adcs": { "name": "ADCS", "ip": "10.10.10.103", "cpus": 2, "memory": 2048 },
+    "sccm": { "name": "SCCM", "ip": "10.10.10.104", "cpus": 2, "memory": 8192 },
+    "svr1": { "name": "SVR1", "ip": "10.10.10.150", "cpus": 2, "memory": 2048 }
+  },
+  "sccm": {
+    "siteCode": "PS1",
+    "siteName": "LabPrimary",
+    "accountPassword": "P@ssw0rd",
+    "accounts": {
+      "admin": "SCCMAdmin",
+      "sqlAgent": "sqlSrvAgent",
+      "networkAccess": "sccm_naa",
+      "clientPush": "sccm_cpia",
+      "domainJoin": "sccm_dja"
+    }
+  }
+}

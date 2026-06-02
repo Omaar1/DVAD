@@ -1,10 +1,6 @@
 param(
-    [string]
-    [Parameter(Mandatory = $true, Position=0)]
-    $domainVariables,
-
     [string[]]
-    [Parameter(Position=1, ValueFromRemainingArguments)]
+    [Parameter(Position=0, ValueFromRemainingArguments)]
     $files
 )
 #This script will take JSON input for new AD objects and will create them. Support for the following objects is currently available:
@@ -17,7 +13,12 @@ param(
 # ** SPN Bit
 # * Group Members
 
-$domain = Get-Content -Raw -Path "C:\vagrant\provision\variables\${domainVariables}" | ConvertFrom-Json
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+$cfg    = Get-LabConfig
+$domain = $cfg.domain
+
+Start-PhaseTimer -PhaseName "CREATE AD OBJECTS (OUs, groups, users)"
 
 try {
     Import-Module ActiveDirectory -ErrorAction Stop
@@ -117,3 +118,6 @@ foreach ($file in $files) {
         }
     }
 }
+
+Stop-PhaseTimer -Status Success
+Show-InstallationSummary

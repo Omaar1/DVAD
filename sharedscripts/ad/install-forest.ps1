@@ -1,7 +1,3 @@
-param(
-    [string] $forestVariables
-)
-
 # ==============================================================================
 # Script: install-forest.ps1
 # Purpose: Install AD Forest (Root Domain Controller) with Phase Timing
@@ -10,11 +6,13 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Import Phase Timer Module
-Import-Module "$PSScriptRoot\PhaseTimer.psm1" -Force
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
 
 #This script promotes the Windows Server to a domain controller and will start the installation of a forest.
-$forest = Get-Content -Raw -Path "C:\vagrant\provision\variables\${forestVariables}" | ConvertFrom-Json
-$domain = Get-Content -Raw -Path "C:\vagrant\provision\variables\domain-variables.json" | ConvertFrom-Json
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$cfg    = Get-LabConfig
+$forest = $cfg.domain
+$child  = $cfg.childDomain
 
 # ==============================================================================
 # PHASE 1: Network Adapter Configuration
@@ -90,8 +88,8 @@ if (Get-WindowsFeature -Name DNS | Where-Object { $_.Installed -eq $true }) {
 $safeModePassword = ConvertTo-SecureString $forest.safeModeAdministratorPassword -AsPlainText -Force
 
 $hostEntries = @(
-    @{IPAddress = $forest.dcIPAddress; Hostname = $forest.name},
-    @{IPAddress = $domain.dcIPAddress; Hostname = $domain.name}
+    @{IPAddress = $cfg.hosts.rootdc.ip; Hostname = $forest.name},
+    @{IPAddress = $cfg.hosts.childdc.ip; Hostname = $child.name}
 )
 
 # Path to the hosts file

@@ -1,59 +1,21 @@
-# --- CONFIGURATION ---
 # --- CONFIGURATION VARIABLES ---
-$SiteCode = "PS1"
-$SiteServer = "SCCM.silent.run"    
-$User = "SILENT\sccm_cpia"
-$Password = "P@ssw0rd"
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$cfg = Get-LabConfig
+$netbios = $cfg.domain.netbiosName
+$SiteCode = $cfg.sccm.siteCode
+$SiteServer = "$($cfg.hosts.sccm.name).$($cfg.domain.fqdn)"
+$User = "$netbios\$($cfg.sccm.accounts.clientPush)"
+$Password = $cfg.sccm.accountPassword
 # ---------------------
 
 # ============================================================================== #
 # INITIALIZATION: LOAD MODULE & CONNECT TO SITE
 # ============================================================================== #
-Write-Host "--- INITIALIZING SCCM MODULE ---" -ForegroundColor Cyan
-try {
-    # 1. Locate ConfigurationManager.psd1 via Registry
-    $RegKey = "HKLM:\SOFTWARE\Microsoft\ConfigMgr10\Setup"
-    $ConsolePath = $null
-    
-    if (Test-Path $RegKey) {
-        $InstallDir = (Get-ItemProperty -Path $RegKey -Name "UI Installation Directory" -ErrorAction SilentlyContinue)."UI Installation Directory"
-        if ($InstallDir) {
-            $ConsolePath = Join-Path $InstallDir "bin\ConfigurationManager.psd1"
-        }
-    }
+. C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+Connect-CMSite -SiteCode $SiteCode -SiteServer $SiteServer
 
-    # 2. Fallback: Check Standard Paths if registry lookup fails
-    if (-not $ConsolePath -or -not (Test-Path $ConsolePath)) {
-        $PossiblePaths = @(
-            "$($Env:SMS_ADMIN_UI_PATH)\..\ConfigurationManager.psd1",
-            "C:\Program Files (x86)\Microsoft Endpoint Manager\AdminConsole\bin\ConfigurationManager.psd1",
-            "C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1",
-            "C:\Program Files\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1"
-        )
-        $ConsolePath = $PossiblePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-    }
-
-    # 3. Load the Module
-    if ($ConsolePath -and (Test-Path $ConsolePath)) {
-        Write-Host " [INFO] Found Module at: $ConsolePath" -ForegroundColor Gray
-        Import-Module $ConsolePath -ErrorAction Stop
-    }
-    else {
-        Throw "Could not locate ConfigurationManager.psd1 in any standard location."
-    }
-
-    # 4. Connect to Site
-    if ((Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue) -eq $null) {
-        New-PSDrive -Name $SiteCode -PSProvider CMSite -Root $SiteServer -ErrorAction Stop | Out-Null
-    }
-    Set-Location "$($SiteCode):"
-    Write-Host " [OK] Connected to Site $SiteCode" -ForegroundColor Green
-
-}
-catch {
-    Write-Error "Failed to load SCCM Module: $_"
-    exit 1
-}
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Start-PhaseTimer -PhaseName "VULN CLIENT PUSH (CRED-3)"
 
 # 1. Define the Credential (SCCM needs the password to store it locally)
 $SecurePass = ConvertTo-SecureString $Password -AsPlainText -Force
@@ -76,5 +38,8 @@ Set-CMClientPushInstallation `
     -EnableSystemTypeWorkstation $true `
     -EnableSystemTypeConfigurationManager $true `
     -EnableAutomaticClientPushInstallation $true `
-    -AddAccount $User `
+    -AddAccount $User
     # -Verbose
+
+Stop-PhaseTimer -Status Success
+Show-InstallationSummary

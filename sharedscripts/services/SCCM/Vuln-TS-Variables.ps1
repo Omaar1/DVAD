@@ -7,9 +7,12 @@
 # ==============================================================================
 
 # --- CONFIGURATION ---
-$SiteCode = "PS1"
-$SiteServer = "SCCM.silent.run"
-$BootImageName = "Boot Image (x64)"  
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$cfg = Get-LabConfig
+$netbios = $cfg.domain.netbiosName
+$SiteCode = $cfg.sccm.siteCode
+$SiteServer = "$($cfg.hosts.sccm.name).$($cfg.domain.fqdn)"
+$BootImageName = "Boot Image (x64)"
 
 # Scenario 1 Config (Anonymous TS)
 $TSName_Anon = "Vulnerable Task Sequence"
@@ -22,9 +25,9 @@ $TSName_Auth = "Pilot Upgrade TS"
 $Collection_Auth = "Windows 11 Pilot Group"
 $LimitingColl_Auth = "All Systems"
 $NamingPattern_Auth = "PILOT-%"
-$DomainName = "silent.run"
-$JoinAccount = "SILENT\sccm_dja"
-$JoinPassword = "P@ssw0rd"
+$DomainName = $cfg.domain.fqdn
+$JoinAccount = "$netbios\$($cfg.sccm.accounts.domainJoin)"
+$JoinPassword = $cfg.sccm.accountPassword
 
 # Scenario 3 Config (Collection Variable)
 $CollVarName = "AWS_Migration_Secret"
@@ -33,48 +36,11 @@ $CollVarValue = "AKIA-SERVER-MIGRATION-KEY-999"
 # ==============================================================================
 # INITIALIZATION: LOAD MODULE & CONNECT TO SITE
 # ==============================================================================
-Write-Host "--- INITIALIZING SCCM MODULE ---" -ForegroundColor Cyan
-try {
-    # 1. Locate ConfigurationManager.psd1 via Registry
-    $RegKey = "HKLM:\SOFTWARE\Microsoft\ConfigMgr10\Setup"
-    $ConsolePath = $null
-    
-    if (Test-Path $RegKey) {
-        $InstallDir = (Get-ItemProperty -Path $RegKey -Name "UI Installation Directory" -ErrorAction SilentlyContinue)."UI Installation Directory"
-        if ($InstallDir) {
-            $ConsolePath = Join-Path $InstallDir "bin\ConfigurationManager.psd1"
-        }
-    }
+. C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+Connect-CMSite -SiteCode $SiteCode -SiteServer $SiteServer
 
-    # 2. Fallback
-    if (-not $ConsolePath -or -not (Test-Path $ConsolePath)) {
-        $PossiblePaths = @(
-            "$($Env:SMS_ADMIN_UI_PATH)\..\ConfigurationManager.psd1",
-            "C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1"
-        )
-        $ConsolePath = $PossiblePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-    }
-
-    # 3. Load Module
-    if ($ConsolePath -and (Test-Path $ConsolePath)) {
-        Import-Module $ConsolePath -ErrorAction Stop
-    }
-    else {
-        Throw "Could not locate ConfigurationManager.psd1 in any standard location."
-    }
-
-    # 4. Connect to Site
-    if ((Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue) -eq $null) {
-        New-PSDrive -Name $SiteCode -PSProvider CMSite -Root $SiteServer -ErrorAction Stop | Out-Null
-    }
-    Set-Location "$($SiteCode):"
-    Write-Host " [OK] Connected to Site $SiteCode" -ForegroundColor Green
-
-}
-catch {
-    Write-Error "Failed to load SCCM Module: $_"
-    exit 1
-}
+Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Start-PhaseTimer -PhaseName "VULN TASK SEQUENCE VARIABLES (CRED-2)"
 
 # ==============================================================================
 # PART 1: ANONYMOUS TASK SEQUENCE (Hidden Variable Leak)
@@ -161,3 +127,6 @@ catch {
 }
 
 Write-Host "`n[COMPLETE] Vulnerable TS Configuration Finished." -ForegroundColor Magenta
+
+Stop-PhaseTimer -Status Success
+Show-InstallationSummary

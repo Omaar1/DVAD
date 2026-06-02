@@ -23,8 +23,11 @@ param(
 # Run as ordered Vagrant provisioning steps (no scheduled tasks).
 # ==============================================================================
 
-$LabSubnet = '10.10.10.'      # lab private subnet prefix
-$DcIp      = '10.10.10.100'   # Root DC
+. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+$cfg       = Get-LabConfig
+$LabSubnet = $cfg.network.prefix    # lab private subnet prefix
+$DcIp      = $cfg.hosts.rootdc.ip   # Root DC
+$Fqdn      = $cfg.domain.fqdn
 
 function Get-DomainNic {
     # The adapter whose IPv4 is on the lab subnet.
@@ -100,7 +103,7 @@ switch ($Action) {
 
         # Belt-and-suspenders: remove any stray NAT (10.0.2.x) A records. Prevention is in
         # the Policy action (NAT never registers), so this should normally find nothing.
-        foreach ($zone in @('silent.run', '_msdcs.silent.run')) {
+        foreach ($zone in @($Fqdn, "_msdcs.$Fqdn")) {
             $records = Get-DnsServerResourceRecord -ZoneName $zone -RRType A -ErrorAction SilentlyContinue
             foreach ($r in $records) {
                 if ($r.RecordData.IPv4Address -match '10\.0\.2\.') {

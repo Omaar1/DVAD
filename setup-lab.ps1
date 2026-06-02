@@ -22,10 +22,14 @@ if (-not $isAdmin) {
     exit 1
 }
 
+# Single source of truth for hostnames, IPs, box, and resources.
+. "$PSScriptRoot\sharedscripts\Get-LabConfig.ps1"
+$cfg = Get-LabConfig
+
 Write-Host ""
 Write-Host "  ============================================" -ForegroundColor Magenta
 Write-Host "   ITI-cyLab - AD Pentest Lab Setup" -ForegroundColor Magenta
-Write-Host "   4 VMs: RootDC + ADCS + SCCM + SVR1 (silent.run)" -ForegroundColor Magenta
+Write-Host "   4 VMs: RootDC + ADCS + SCCM + SVR1 ($($cfg.domain.fqdn))" -ForegroundColor Magenta
 Write-Host "  ============================================" -ForegroundColor Magenta
 Write-Host ""
 
@@ -49,7 +53,7 @@ if ($driveChoice -eq "2") {
     $storageDrive = "C:"
 }
 
-$boxVersion = "2018.10.03"
+$boxVersion = $cfg.box.version
 
 Write-Host ""
 
@@ -193,7 +197,7 @@ if ($vboxCmd -and (Test-Path $vboxCmd)) {
     Write-Ok "VirtualBox VM folder = $vboxVMFolder"
 }
 
-$labVMNames = @("ROOTDC", "ADCS", "SCCM", "SVR1")
+$labVMNames = @($cfg.hosts.rootdc.name, $cfg.hosts.adcs.name, $cfg.hosts.sccm.name, $cfg.hosts.svr1.name)
 Write-Status "Checking for existing VMs with lab names..."
 $existingVMs = @()
 if ($vboxCmd -and (Test-Path $vboxCmd)) {
@@ -310,13 +314,13 @@ Write-Host "  ============================================" -ForegroundColor Gre
 Write-Host ""
 Write-Host "  Lab Path:   $labPath" -ForegroundColor White
 Write-Host "  Storage:    $storageDrive (boxes + VMs)" -ForegroundColor White
-Write-Host "  Box:        StefanScherer/windows_2019 v$boxVersion" -ForegroundColor White
-Write-Host "  Domain:     silent.run" -ForegroundColor White
-Write-Host "  RootDC:     10.10.10.100 (2 GB RAM)" -ForegroundColor White
-Write-Host "  ADCS:       10.10.10.103 (2 GB RAM)" -ForegroundColor White
-Write-Host "  SCCM:       10.10.10.104 (8 GB RAM)" -ForegroundColor White
-Write-Host "  SVR1:       10.10.10.150 (2 GB RAM)" -ForegroundColor White
-Write-Host "  Total RAM:  ~14 GB for VMs" -ForegroundColor White
+Write-Host "  Box:        $($cfg.box.name) v$boxVersion" -ForegroundColor White
+Write-Host "  Domain:     $($cfg.domain.fqdn)" -ForegroundColor White
+Write-Host "  RootDC:     $($cfg.hosts.rootdc.ip) ($([math]::Round($cfg.hosts.rootdc.memory/1024)) GB RAM)" -ForegroundColor White
+Write-Host "  ADCS:       $($cfg.hosts.adcs.ip) ($([math]::Round($cfg.hosts.adcs.memory/1024)) GB RAM)" -ForegroundColor White
+Write-Host "  SCCM:       $($cfg.hosts.sccm.ip) ($([math]::Round($cfg.hosts.sccm.memory/1024)) GB RAM)" -ForegroundColor White
+Write-Host "  SVR1:       $($cfg.hosts.svr1.ip) ($([math]::Round($cfg.hosts.svr1.memory/1024)) GB RAM)" -ForegroundColor White
+Write-Host "  Total RAM:  ~$([math]::Round(($cfg.hosts.rootdc.memory + $cfg.hosts.adcs.memory + $cfg.hosts.sccm.memory + $cfg.hosts.svr1.memory)/1024)) GB for VMs" -ForegroundColor White
 Write-Host ""
 
 if ($SkipProvision) {
@@ -370,11 +374,11 @@ Write-Host "  ============================================" -ForegroundColor Gre
 Write-Host "   Lab Built Successfully!" -ForegroundColor Green
 Write-Host "  ============================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Domain:     silent.run" -ForegroundColor White
-Write-Host "  RootDC:     10.10.10.100" -ForegroundColor White
-Write-Host "  ADCS:       10.10.10.103" -ForegroundColor White
-Write-Host "  SCCM:       10.10.10.104" -ForegroundColor White
-Write-Host "  SVR1:       10.10.10.150" -ForegroundColor White
+Write-Host "  Domain:     $($cfg.domain.fqdn)" -ForegroundColor White
+Write-Host "  RootDC:     $($cfg.hosts.rootdc.ip)" -ForegroundColor White
+Write-Host "  ADCS:       $($cfg.hosts.adcs.ip)" -ForegroundColor White
+Write-Host "  SCCM:       $($cfg.hosts.sccm.ip)" -ForegroundColor White
+Write-Host "  SVR1:       $($cfg.hosts.svr1.ip)" -ForegroundColor White
 Write-Host "  Log:        $log" -ForegroundColor White
 Write-Host ""
 Write-Host "  Run .\verify-lab.ps1 to check health" -ForegroundColor Cyan
