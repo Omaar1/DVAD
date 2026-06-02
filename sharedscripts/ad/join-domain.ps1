@@ -13,7 +13,7 @@ $cfg    = Get-LabConfig
 $domain = $cfg.domain
 $dcIp   = $cfg.hosts.rootdc.ip
 Start-PhaseTimer -PhaseName "DOMAIN JOIN ($($domain.netbiosName))"
-write-Host "Joining domain: $($domain.netbiosName)"
+write-Host "Joining domain: $($domain.fqdn)"
 write-Host "Domain controller to be used as DNS: $dcIp"
 echo "Pointing DNS"
 # Point DNS at domain controller
@@ -35,7 +35,9 @@ if ($ou -ne "default") {
     $params["OUPath"] = $ou + "," + $domain.dn
 }
 echo "Joining computer"
-Add-Computer -DomainName $domain.netbiosName -Credential $domainAdminCredentials @params
+# Join by DNS FQDN, not the NetBIOS short name. NetJoinDomain rejects a flat name
+# when the DC is located via DNS (returns 0x57 "The parameter is incorrect").
+Add-Computer -DomainName $domain.fqdn -Credential $domainAdminCredentials @params
 echo "Computer Joined"
 
 Stop-PhaseTimer -Status Success
