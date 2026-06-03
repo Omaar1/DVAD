@@ -91,7 +91,7 @@ try {
                 @{ Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate';             Name = 'DoNotConnectToWindowsUpdateInternetLocations'; Value = 0 }
             )
             foreach ($p in $policies) {
-                $p.Prev = (Get-ItemProperty -Path $p.Path -ErrorAction SilentlyContinue).$($p.Name)
+                $p.Prev = Get-ItemPropertyValue -Path $p.Path -Name $p.Name -ErrorAction SilentlyContinue
             }
             $prevStart = (Get-CimInstance Win32_Service -Filter "Name='wuauserv'").StartMode
             try {
