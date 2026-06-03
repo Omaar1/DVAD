@@ -79,13 +79,35 @@ try {
             # Both are reverted by later steps (installMECM re-points DNS as needed).
             Write-Host "Installing .NET 3.5 from Windows Update (online)..." -ForegroundColor Cyan
             & "C:\vagrant\sharedscripts\networking\configure-network.ps1" -Action NatInternetDns
+
+            # A WSUS / Windows Update policy on the box redirects Features-on-Demand
+            # to a WSUS server that does not host the NetFx3 payload, so DISM fails
+            # with 0x800f0950 even though the internet is reachable. Temporarily force
+            # FoD/repair content to come straight from Windows Update (and let the AU
+            # client reach the internet), then restore every value we touched.
+            $policies = @(
+                @{ Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Servicing'; Name = 'RepairContentServerSource'; Value = 2 }
+                @{ Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU';          Name = 'UseWUServer';               Value = 0 }
+                @{ Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate';             Name = 'DoNotConnectToWindowsUpdateInternetLocations'; Value = 0 }
+            )
+            foreach ($p in $policies) {
+                $p.Prev = (Get-ItemProperty -Path $p.Path -Name $p.Name -ErrorAction SilentlyContinue).$($p.Name)
+            }
             $prevStart = (Get-CimInstance Win32_Service -Filter "Name='wuauserv'").StartMode
             try {
+                foreach ($p in $policies) {
+                    if (-not (Test-Path $p.Path)) { New-Item -Path $p.Path -Force | Out-Null }
+                    New-ItemProperty -Path $p.Path -Name $p.Name -PropertyType DWord -Value $p.Value -Force | Out-Null
+                }
                 Set-Service wuauserv -StartupType Manual -ErrorAction SilentlyContinue
-                Start-Service wuauserv -ErrorAction SilentlyContinue
+                Restart-Service wuauserv -ErrorAction SilentlyContinue
                 Enable-WindowsOptionalFeature -Online -FeatureName NetFx3 -All -NoRestart -ErrorAction Stop
             }
             finally {
+                foreach ($p in $policies) {
+                    if ($null -eq $p.Prev) { Remove-ItemProperty -Path $p.Path -Name $p.Name -ErrorAction SilentlyContinue }
+                    else { Set-ItemProperty -Path $p.Path -Name $p.Name -Value $p.Prev -ErrorAction SilentlyContinue }
+                }
                 Stop-Service wuauserv -ErrorAction SilentlyContinue
                 if ($prevStart -eq 'Disabled') { Set-Service wuauserv -StartupType Disabled -ErrorAction SilentlyContinue }
             }
