@@ -58,8 +58,11 @@ function Connect-CMSite {
     }
 
     # 3. Connect to the site (create the CMSite PSDrive if missing) and switch to it.
+    # -Scope Global is essential: this runs inside a function, so a scope-local drive
+    # would be removed the instant the function returns, leaving the caller's CM cmdlets
+    # to fail with "Value cannot be null. Parameter name: key".
     if (-not (Get-PSDrive -Name $SiteCode -PSProvider CMSite -ErrorAction SilentlyContinue)) {
-        New-PSDrive -Name $SiteCode -PSProvider CMSite -Root $SiteServer -ErrorAction Stop | Out-Null
+        New-PSDrive -Name $SiteCode -PSProvider CMSite -Root $SiteServer -Scope Global -ErrorAction Stop | Out-Null
     }
     Set-Location "$($SiteCode):"
     Write-Host " [OK] Connected to Site $SiteCode" -ForegroundColor Green
