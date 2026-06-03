@@ -113,6 +113,9 @@ Vagrant.configure("2") do |cfg_vm|
 
       # # # Configure DNS
       #Join the domain specified in provided variables file - Only do this after everything else has been installed
+      # Settle reboot first: commits any pending sysprep/hostname rename so the join
+      # does not fail with 0x57 "The parameter is incorrect".
+      config.vm.provision "shell", reboot: true
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/join-domain.ps1"
       config.vm.provision "shell", reboot: true
 
@@ -174,6 +177,9 @@ Vagrant.configure("2") do |cfg_vm|
       # ========================================================================
 
       # Join the SCCM server to the domain (credentials come from lab-config.json)
+      # Settle reboot first: commits any pending sysprep/hostname rename so the join
+      # does not fail with 0x57 "The parameter is incorrect".
+      config.vm.provision "shell", reboot: true
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/join-domain.ps1"
       config.vm.provision "shell", reboot: true
 
@@ -355,6 +361,9 @@ Vagrant.configure("2") do |cfg_vm|
       config.vm.provision "shell", reboot: true
 
       # Join the domain
+      # Settle reboot first: commits any pending sysprep/hostname rename so the join
+      # does not fail with 0x57 "The parameter is incorrect".
+      config.vm.provision "shell", reboot: true
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/join-domain.ps1"
       config.vm.provision "shell", reboot: true
 

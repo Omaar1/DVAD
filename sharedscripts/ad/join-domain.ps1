@@ -6,12 +6,6 @@ param(
 )
 
 # Joins this machine to the domain defined in lab-config.json (optionally into -ou).
-#
-# NB the actual Add-Computer runs via PsExec -s (as SYSTEM), not directly. Vagrant's
-# WinRM provisioner runs under a network-logon token, and NetJoinDomain fails there
-# with 0x57 "The parameter is incorrect" (the same command in a local session works).
-# SYSTEM is a full, non-network token with no logon-right/UAC restrictions, so the
-# join succeeds; the domain credential is passed explicitly to Add-Computer.
 
 . C:\vagrant\sharedscripts\Get-LabConfig.ps1
 Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
@@ -44,33 +38,16 @@ if ($adapters) {
     }
 }
 
-$ouArg = ""
-if ($ou -ne "default") { $ouArg = " -OUPath '$ou,$($domain.dn)'" }
-
-# Inner script that performs the join; run under the elevated interactive logon.
-$inner = @"
-try {
-    `$cred = New-Object System.Management.Automation.PSCredential('$($domain.netbiosName)\Administrator', (ConvertTo-SecureString '$($domain.administratorPassword)' -AsPlainText -Force))
-    Add-Computer -DomainName '$($domain.fqdn)' -Credential `$cred$ouArg -ErrorAction Stop
-    Write-Output 'JOIN OK'
-    exit 0
-} catch {
-    Write-Output ('JOIN ERROR: ' + `$_.Exception.Message)
-    exit 1
+$securePassword = ConvertTo-SecureString $domain.administratorPassword -AsPlainText -Force
+$username = $domain.netbiosName + "\Administrator"
+$domainAdminCredentials = New-Object System.Management.Automation.PSCredential($username, $securePassword)
+$params = @{}
+if ($ou -ne "default") {
+    $params["OUPath"] = $ou + "," + $domain.dn
 }
-"@
-$innerPath = "C:\join-inner.ps1"
-$inner | Out-File -FilePath $innerPath -Encoding ASCII
 
-$psexec = "C:\vagrant\sharedscripts\windows\PsExec64.exe"
-Write-Host "Joining computer (PsExec as SYSTEM)..."
-& $psexec -accepteula -nobanner -s powershell -NoProfile -ExecutionPolicy Bypass -File $innerPath
-$rc = $LASTEXITCODE
-Remove-Item $innerPath -Force -ErrorAction SilentlyContinue
-
-if ($rc -ne 0) {
-    throw "Domain join failed (PsExec/Add-Computer exit $rc). See 'JOIN ERROR' line above."
-}
+Write-Host "Joining computer..."
+Add-Computer -DomainName $domain.fqdn -Credential $domainAdminCredentials @params -ErrorAction Stop
 Write-Host "Computer joined to $($domain.fqdn)."
 
 Stop-PhaseTimer -Status Success
