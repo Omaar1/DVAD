@@ -7,11 +7,11 @@ param(
 
 # Joins this machine to the domain defined in lab-config.json (optionally into -ou).
 #
-# NB the actual Add-Computer runs via PsExec under a fresh ELEVATED INTERACTIVE logon
-# (-u/-p/-h), not directly. Vagrant's WinRM provisioner runs under a network-logon
-# token, and NetJoinDomain fails there with 0x57 "The parameter is incorrect" (the
-# exact same command run in a local elevated console succeeds). PsExec gives us that
-# console-equivalent logon synchronously, without the schtasks flakiness.
+# NB the actual Add-Computer runs via PsExec -s (as SYSTEM), not directly. Vagrant's
+# WinRM provisioner runs under a network-logon token, and NetJoinDomain fails there
+# with 0x57 "The parameter is incorrect" (the same command in a local session works).
+# SYSTEM is a full, non-network token with no logon-right/UAC restrictions, so the
+# join succeeds; the domain credential is passed explicitly to Add-Computer.
 
 . C:\vagrant\sharedscripts\Get-LabConfig.ps1
 Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
@@ -63,8 +63,8 @@ $innerPath = "C:\join-inner.ps1"
 $inner | Out-File -FilePath $innerPath -Encoding ASCII
 
 $psexec = "C:\vagrant\sharedscripts\windows\PsExec64.exe"
-Write-Host "Joining computer (PsExec elevated interactive logon)..."
-& $psexec -accepteula -nobanner -h -u vagrant -p vagrant powershell -NoProfile -ExecutionPolicy Bypass -File $innerPath
+Write-Host "Joining computer (PsExec as SYSTEM)..."
+& $psexec -accepteula -nobanner -s powershell -NoProfile -ExecutionPolicy Bypass -File $innerPath
 $rc = $LASTEXITCODE
 Remove-Item $innerPath -Force -ErrorAction SilentlyContinue
 
