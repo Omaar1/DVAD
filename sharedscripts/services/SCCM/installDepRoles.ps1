@@ -58,60 +58,20 @@ try {
         Stop-PhaseTimer -Status Success
     }
     else {
-        # Prefer a pre-staged offline source if present (drop the SxS cabs into
-        # ...\SCCM\sxs for air-gapped hosts). The cabs are intentionally NOT committed
-        # to the repo - by default we pull NetFx3 from Windows Update instead.
+        # .NET 3.5 is a Feature-on-Demand whose payload is not present on the box, and
+        # this box cannot fetch it from Windows Update (a WSUS policy redirects the FoD
+        # request, so DISM fails 0x800f0950). We install from a pre-staged offline
+        # source instead: drop the NetFx3 SxS cabs into ...\SCCM\sxs (gitignored, not
+        # committed - they can be extracted from this repo's git history; see .gitignore).
         $LocalSource = "C:\vagrant\sharedscripts\services\SCCM\sxs"
-        $haveLocal = (Test-Path $LocalSource) -and
-                     (@(Get-ChildItem -Path $LocalSource -Filter '*.cab' -ErrorAction SilentlyContinue).Count -gt 0)
+        $haveLocal = @(Get-ChildItem -Path $LocalSource -Filter '*.cab' -ErrorAction SilentlyContinue).Count -gt 0
 
-        if ($haveLocal) {
-            Write-Host "Installing .NET 3.5 from pre-staged offline source ($LocalSource)..." -ForegroundColor Cyan
-            Enable-WindowsOptionalFeature -Online -FeatureName NetFx3 -All -Source $LocalSource -LimitAccess -NoRestart -ErrorAction Stop
+        if (-not $haveLocal) {
+            throw "No NetFx3 source cabs found in $LocalSource. Pre-stage the SxS cabs there (see the sxs note in .gitignore); this box cannot install .NET 3.5 from Windows Update."
         }
-        else {
-            # Official source: Windows Update Features on Demand (nothing redistributed
-            # or committed). Two prerequisites this early in provisioning:
-            #  1. Internet DNS - the box's DNS still points only at the DC (set during
-            #     join) which cannot route to Windows Update; put public DNS on the NAT
-            #     NIC first (the 0x800f0950 "source not found" error is this missing).
-            #  2. wuauserv - provision-base disables it; DISM needs it to fetch the FOD.
-            # Both are reverted by later steps (installMECM re-points DNS as needed).
-            Write-Host "Installing .NET 3.5 from Windows Update (online)..." -ForegroundColor Cyan
-            & "C:\vagrant\sharedscripts\networking\configure-network.ps1" -Action NatInternetDns
 
-            # A WSUS / Windows Update policy on the box redirects Features-on-Demand
-            # to a WSUS server that does not host the NetFx3 payload, so DISM fails
-            # with 0x800f0950 even though the internet is reachable. Temporarily force
-            # FoD/repair content to come straight from Windows Update (and let the AU
-            # client reach the internet), then restore every value we touched.
-            $policies = @(
-                @{ Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Servicing'; Name = 'RepairContentServerSource'; Value = 2 }
-                @{ Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU';          Name = 'UseWUServer';               Value = 0 }
-                @{ Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate';             Name = 'DoNotConnectToWindowsUpdateInternetLocations'; Value = 0 }
-            )
-            foreach ($p in $policies) {
-                $p.Prev = Get-ItemPropertyValue -Path $p.Path -Name $p.Name -ErrorAction SilentlyContinue
-            }
-            $prevStart = (Get-CimInstance Win32_Service -Filter "Name='wuauserv'").StartMode
-            try {
-                foreach ($p in $policies) {
-                    if (-not (Test-Path $p.Path)) { New-Item -Path $p.Path -Force | Out-Null }
-                    New-ItemProperty -Path $p.Path -Name $p.Name -PropertyType DWord -Value $p.Value -Force | Out-Null
-                }
-                Set-Service wuauserv -StartupType Manual -ErrorAction SilentlyContinue
-                Restart-Service wuauserv -ErrorAction SilentlyContinue
-                Enable-WindowsOptionalFeature -Online -FeatureName NetFx3 -All -NoRestart -ErrorAction Stop
-            }
-            finally {
-                foreach ($p in $policies) {
-                    if ($null -eq $p.Prev) { Remove-ItemProperty -Path $p.Path -Name $p.Name -ErrorAction SilentlyContinue }
-                    else { Set-ItemProperty -Path $p.Path -Name $p.Name -Value $p.Prev -ErrorAction SilentlyContinue }
-                }
-                Stop-Service wuauserv -ErrorAction SilentlyContinue
-                if ($prevStart -eq 'Disabled') { Set-Service wuauserv -StartupType Disabled -ErrorAction SilentlyContinue }
-            }
-        }
+        Write-Host "Installing .NET 3.5 from offline source ($LocalSource)..." -ForegroundColor Cyan
+        Enable-WindowsOptionalFeature -Online -FeatureName NetFx3 -All -Source $LocalSource -LimitAccess -NoRestart -ErrorAction Stop
 
         Write-Host " [SUCCESS] .NET 3.5 Installed." -ForegroundColor Green
         Stop-PhaseTimer -Status Success
