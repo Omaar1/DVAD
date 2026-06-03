@@ -27,10 +27,11 @@ if ($adapters) {
         }
     }
 }
-# Domain join must run under a real (batch) logon token. Over the WinRM network token
-# NetJoinDomain fails with 0x57 "The parameter is incorrect" - the same token problem
-# the other AD-write steps avoid with Invoke-AsUserTask. Run the join as SYSTEM via a
-# one-shot scheduled task; the domain credential is passed to Add-Computer inside.
+# Domain join must run under a real (interactive/batch) logon token. Over the WinRM
+# network token NetJoinDomain fails with 0x57 "The parameter is incorrect" (joining as
+# a local admin from the console works). Run the join under the box's local admin via a
+# one-shot scheduled task (/rl highest = full token); domain cred passed to Add-Computer.
+# 'vagrant'/'vagrant' is the StefanScherer box's built-in local admin (the WinRM user).
 $ouArg = ""
 if ($ou -ne "default") { $ouArg = " -OUPath `"$ou,$($domain.dn)`"" }
 
@@ -40,8 +41,8 @@ $joinScript = @"
 Add-Computer -DomainName '$($domain.fqdn)' -Credential `$cred$ouArg -ErrorAction Stop
 "@
 
-Write-Host "Joining computer (via SYSTEM scheduled task)..."
-if (Invoke-AsUserTask -Name "JoinDomain" -ScriptContent $joinScript -User "SYSTEM" -TimeoutSec 180) {
+Write-Host "Joining computer (via local-admin scheduled task)..."
+if (Invoke-AsUserTask -Name "JoinDomain" -ScriptContent $joinScript -User "vagrant" -Password "vagrant" -TimeoutSec 180) {
     Write-Host "Computer joined to $($domain.fqdn)."
 } else {
     throw "Domain join failed (see JoinDomain task log above)."
