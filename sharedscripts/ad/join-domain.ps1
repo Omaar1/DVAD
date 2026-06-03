@@ -8,6 +8,7 @@ param(
 #This script will join the machine to the domain, based on lab-config.json and added to the instructed OU
 
 . C:\vagrant\sharedscripts\Get-LabConfig.ps1
+. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
 Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
 $cfg    = Get-LabConfig
 $domain = $cfg.domain
@@ -26,19 +27,25 @@ if ($adapters) {
         }
     }
 }
-echo "Creating account"
-$securePassword = ConvertTo-SecureString $domain.administratorPassword -AsPlainText -Force
-$username = $domain.netbiosName + "\Administrator" 
-$domainAdminCredentials = New-Object System.Management.Automation.PSCredential($username, $securePassword)
-$params = @{}
-if ($ou -ne "default") {
-    $params["OUPath"] = $ou + "," + $domain.dn
+# Domain join must run under a real (batch) logon token. Over the WinRM network token
+# NetJoinDomain fails with 0x57 "The parameter is incorrect" - the same token problem
+# the other AD-write steps avoid with Invoke-AsUserTask. Run the join as SYSTEM via a
+# one-shot scheduled task; the domain credential is passed to Add-Computer inside.
+$ouArg = ""
+if ($ou -ne "default") { $ouArg = " -OUPath `"$ou,$($domain.dn)`"" }
+
+$joinScript = @"
+`$sp   = ConvertTo-SecureString '$($domain.administratorPassword)' -AsPlainText -Force
+`$cred = New-Object System.Management.Automation.PSCredential('$($domain.netbiosName)\Administrator', `$sp)
+Add-Computer -DomainName '$($domain.fqdn)' -Credential `$cred$ouArg -ErrorAction Stop
+"@
+
+Write-Host "Joining computer (via SYSTEM scheduled task)..."
+if (Invoke-AsUserTask -Name "JoinDomain" -ScriptContent $joinScript -User "SYSTEM" -TimeoutSec 180) {
+    Write-Host "Computer joined to $($domain.fqdn)."
+} else {
+    throw "Domain join failed (see JoinDomain task log above)."
 }
-echo "Joining computer"
-# Join by DNS FQDN, not the NetBIOS short name. NetJoinDomain rejects a flat name
-# when the DC is located via DNS (returns 0x57 "The parameter is incorrect").
-Add-Computer -DomainName $domain.fqdn -Credential $domainAdminCredentials @params
-echo "Computer Joined"
 
 Stop-PhaseTimer -Status Success
 Show-InstallationSummary
