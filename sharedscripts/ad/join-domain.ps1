@@ -5,18 +5,35 @@ param(
     [string] $ou = "default"
 )
 
-#This script will join the machine to the domain, based on lab-config.json and added to the instructed OU
+# Joins this machine to the domain defined in lab-config.json (optionally into -ou).
+#
+# NB the actual Add-Computer runs via PsExec under a fresh ELEVATED INTERACTIVE logon
+# (-u/-p/-h), not directly. Vagrant's WinRM provisioner runs under a network-logon
+# token, and NetJoinDomain fails there with 0x57 "The parameter is incorrect" (the
+# exact same command run in a local elevated console succeeds). PsExec gives us that
+# console-equivalent logon synchronously, without the schtasks flakiness.
 
 . C:\vagrant\sharedscripts\Get-LabConfig.ps1
 Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
 $cfg    = Get-LabConfig
 $domain = $cfg.domain
 $dcIp   = $cfg.hosts.rootdc.ip
-Start-PhaseTimer -PhaseName "DOMAIN JOIN ($($domain.netbiosName))"
-write-Host "Joining domain: $($domain.fqdn)"
-write-Host "Domain controller to be used as DNS: $dcIp"
-echo "Pointing DNS"
-# Point DNS at domain controller
+
+Start-PhaseTimer -PhaseName "DOMAIN JOIN ($($domain.fqdn))"
+
+# Idempotency: if already domain-joined, do nothing (lets re-provisioning succeed).
+$cs = Get-WmiObject Win32_ComputerSystem
+if ($cs.PartOfDomain) {
+    Write-Host "Already joined to domain '$($cs.Domain)'. Skipping."
+    Stop-PhaseTimer -Status Success
+    Show-InstallationSummary
+    exit 0
+}
+
+Write-Host "Joining domain: $($domain.fqdn)"
+Write-Host "Domain controller to be used as DNS: $dcIp"
+
+# Point DNS at the domain controller.
 $adapters = Get-WmiObject Win32_NetworkAdapterConfiguration
 if ($adapters) {
     $adapters | ForEach-Object {
@@ -26,19 +43,35 @@ if ($adapters) {
         }
     }
 }
-echo "Creating account"
-$securePassword = ConvertTo-SecureString $domain.administratorPassword -AsPlainText -Force
-$username = $domain.netbiosName + "\Administrator" 
-$domainAdminCredentials = New-Object System.Management.Automation.PSCredential($username, $securePassword)
-$params = @{}
-if ($ou -ne "default") {
-    $params["OUPath"] = $ou + "," + $domain.dn
+
+$ouArg = ""
+if ($ou -ne "default") { $ouArg = " -OUPath '$ou,$($domain.dn)'" }
+
+# Inner script that performs the join; run under the elevated interactive logon.
+$inner = @"
+try {
+    `$cred = New-Object System.Management.Automation.PSCredential('$($domain.netbiosName)\Administrator', (ConvertTo-SecureString '$($domain.administratorPassword)' -AsPlainText -Force))
+    Add-Computer -DomainName '$($domain.fqdn)' -Credential `$cred$ouArg -ErrorAction Stop
+    Write-Output 'JOIN OK'
+    exit 0
+} catch {
+    Write-Output ('JOIN ERROR: ' + `$_.Exception.Message)
+    exit 1
 }
-echo "Joining computer"
-# Join by DNS FQDN, not the NetBIOS short name. NetJoinDomain rejects a flat name
-# when the DC is located via DNS (returns 0x57 "The parameter is incorrect").
-Add-Computer -DomainName $domain.fqdn -Credential $domainAdminCredentials @params
-echo "Computer Joined"
+"@
+$innerPath = "C:\join-inner.ps1"
+$inner | Out-File -FilePath $innerPath -Encoding ASCII
+
+$psexec = "C:\vagrant\sharedscripts\windows\PsExec64.exe"
+Write-Host "Joining computer (PsExec elevated interactive logon)..."
+& $psexec -accepteula -nobanner -h -u vagrant -p vagrant powershell -NoProfile -ExecutionPolicy Bypass -File $innerPath
+$rc = $LASTEXITCODE
+Remove-Item $innerPath -Force -ErrorAction SilentlyContinue
+
+if ($rc -ne 0) {
+    throw "Domain join failed (PsExec/Add-Computer exit $rc). See 'JOIN ERROR' line above."
+}
+Write-Host "Computer joined to $($domain.fqdn)."
 
 Stop-PhaseTimer -Status Success
 Show-InstallationSummary
