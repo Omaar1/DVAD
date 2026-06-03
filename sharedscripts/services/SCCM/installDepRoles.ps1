@@ -70,10 +70,15 @@ try {
             Enable-WindowsOptionalFeature -Online -FeatureName NetFx3 -All -Source $LocalSource -LimitAccess -NoRestart -ErrorAction Stop
         }
         else {
-            # Online install via Windows Update. provision-base disables wuauserv, so
-            # temporarily allow it (DISM needs it to download the FOD payload), then
-            # restore the disabled state.
+            # Official source: Windows Update Features on Demand (nothing redistributed
+            # or committed). Two prerequisites this early in provisioning:
+            #  1. Internet DNS - the box's DNS still points only at the DC (set during
+            #     join) which cannot route to Windows Update; put public DNS on the NAT
+            #     NIC first (the 0x800f0950 "source not found" error is this missing).
+            #  2. wuauserv - provision-base disables it; DISM needs it to fetch the FOD.
+            # Both are reverted by later steps (installMECM re-points DNS as needed).
             Write-Host "Installing .NET 3.5 from Windows Update (online)..." -ForegroundColor Cyan
+            & "C:\vagrant\sharedscripts\networking\configure-network.ps1" -Action NatInternetDns
             $prevStart = (Get-CimInstance Win32_Service -Filter "Name='wuauserv'").StartMode
             try {
                 Set-Service wuauserv -StartupType Manual -ErrorAction SilentlyContinue
