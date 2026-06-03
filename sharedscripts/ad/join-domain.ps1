@@ -41,9 +41,12 @@ if ($adapters) {
 $securePassword = ConvertTo-SecureString $domain.administratorPassword -AsPlainText -Force
 $username = $domain.netbiosName + "\Administrator"
 $domainAdminCredentials = New-Object System.Management.Automation.PSCredential($username, $securePassword)
+# Only target a specific OU when one is actually given. An empty/blank $ou here would
+# build a malformed DN (",DC=...") which LDAP rejects with 0x57 (the join then lands in
+# the default Computers container, same as a no-OU join).
 $params = @{}
-if ($ou -ne "default") {
-    $params["OUPath"] = $ou + "," + $domain.dn
+if ($ou -and $ou.Trim() -and $ou -ne "default") {
+    $params["OUPath"] = "$ou,$($domain.dn)"
 }
 
 Write-Host "Joining computer..."
