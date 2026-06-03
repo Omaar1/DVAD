@@ -41,5 +41,6 @@ Desktop.ini
 
 !sharedscripts/services/SCCM/DeploymentConfigTemplate.xml
 !sharedscripts/services/SCCM/extendSchema/*.dll
-!sharedscripts/services/SCCM/sxs/
-!sharedscripts/services/SCCM/sxs/*.cab
+# NetFx3/IE SxS cabs are no longer committed - .NET 3.5 installs from Windows Update
+# by default (installDepRoles.ps1). Drop cabs into sharedscripts/services/SCCM/sxs/
+# only if you need air-gapped/offline provisioning.

@@ -58,25 +58,33 @@ try {
         Stop-PhaseTimer -Status Success
     }
     else {
-        # 2. Validate Source
-        $LocalSource = "C:\vagrant\sharedscripts\services\SCCM\sxs" 
-        
-        if (-not (Test-Path $LocalSource)) {
-            Write-Error "STOP: Source folder '$LocalSource' not found."
-            exit 1
+        # Prefer a pre-staged offline source if present (drop the SxS cabs into
+        # ...\SCCM\sxs for air-gapped hosts). The cabs are intentionally NOT committed
+        # to the repo - by default we pull NetFx3 from Windows Update instead.
+        $LocalSource = "C:\vagrant\sharedscripts\services\SCCM\sxs"
+        $haveLocal = (Test-Path $LocalSource) -and
+                     (@(Get-ChildItem -Path $LocalSource -Filter '*.cab' -ErrorAction SilentlyContinue).Count -gt 0)
+
+        if ($haveLocal) {
+            Write-Host "Installing .NET 3.5 from pre-staged offline source ($LocalSource)..." -ForegroundColor Cyan
+            Enable-WindowsOptionalFeature -Online -FeatureName NetFx3 -All -Source $LocalSource -LimitAccess -NoRestart -ErrorAction Stop
         }
-
-        Write-Host "Installing .NET 3.5 from local source..." -ForegroundColor Cyan
-
-        # 3. Native Install Command
-        # This cmdlet handles the arguments natively, so no quoting/parsing bugs.
-        Enable-WindowsOptionalFeature -Online `
-                                      -FeatureName NetFx3 `
-                                      -All `
-                                      -Source $LocalSource `
-                                      -LimitAccess `
-                                      -NoRestart `
-                                      -ErrorAction Stop
+        else {
+            # Online install via Windows Update. provision-base disables wuauserv, so
+            # temporarily allow it (DISM needs it to download the FOD payload), then
+            # restore the disabled state.
+            Write-Host "Installing .NET 3.5 from Windows Update (online)..." -ForegroundColor Cyan
+            $prevStart = (Get-CimInstance Win32_Service -Filter "Name='wuauserv'").StartMode
+            try {
+                Set-Service wuauserv -StartupType Manual -ErrorAction SilentlyContinue
+                Start-Service wuauserv -ErrorAction SilentlyContinue
+                Enable-WindowsOptionalFeature -Online -FeatureName NetFx3 -All -NoRestart -ErrorAction Stop
+            }
+            finally {
+                Stop-Service wuauserv -ErrorAction SilentlyContinue
+                if ($prevStart -eq 'Disabled') { Set-Service wuauserv -StartupType Disabled -ErrorAction SilentlyContinue }
+            }
+        }
 
         Write-Host " [SUCCESS] .NET 3.5 Installed." -ForegroundColor Green
         Stop-PhaseTimer -Status Success
