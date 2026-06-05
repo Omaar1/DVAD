@@ -30,7 +30,7 @@ foreach ($vm in $vms) {
     if ($ping) {
         Write-Host "  [PING] OK" -ForegroundColor Green
     } else {
-        Write-Host "  [PING] FAIL — VM may be down" -ForegroundColor Red
+        Write-Host "  [PING] FAIL - VM may be down" -ForegroundColor Red
         $allOk = $false
         continue
     }
@@ -58,7 +58,7 @@ foreach ($vm in $vms) {
         }
         Remove-PSSession $session
     } catch {
-        Write-Host "  [WINRM] FAIL — $_" -ForegroundColor Red
+        Write-Host "  [WINRM] FAIL - $_" -ForegroundColor Red
         $allOk = $false
     }
 }
@@ -66,8 +66,8 @@ foreach ($vm in $vms) {
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Cyan
 if ($allOk) {
-    Write-Host " All checks passed — lab is healthy" -ForegroundColor Green
+    Write-Host " All checks passed - lab is healthy" -ForegroundColor Green
 } else {
-    Write-Host " Some checks failed — review output above" -ForegroundColor Red
+    Write-Host " Some checks failed - review output above" -ForegroundColor Red
 }
 Write-Host "======================================" -ForegroundColor Cyan

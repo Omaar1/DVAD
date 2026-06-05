@@ -1,6 +1,6 @@
 # start-lab.ps1
 # Deploy and start SilentRUN-Lab. Works both locally and on a fresh remote server.
-# On a remote server, run this script directly — it will clone the repo if needed.
+# On a remote server, run this script directly - it will clone the repo if needed.
 #
 # Usage:
 #   Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -81,10 +81,10 @@ function Start-VM {
     Start-Sleep -Seconds $WaitSeconds
 }
 
-# RootDC first — everything else joins its domain
+# RootDC first - everything else joins its domain
 Start-VM -Name "RootDC" -WaitSeconds 90
 
-# ADCS and SCCM next — both join the domain independently
+# ADCS and SCCM next - both join the domain independently
 Write-Host ""
 Write-Host "[*] Starting ADCS_server and SCCM_server..." -ForegroundColor Yellow
 vagrant up ADCS_server SCCM_server
@@ -95,7 +95,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "[+] ADCS and SCCM started." -ForegroundColor Green
 Start-Sleep -Seconds 60
 
-# SVR1 last — configure-machine-attacks.ps1 needs ADCS computer object in AD
+# SVR1 last - configure-machine-attacks.ps1 needs ADCS computer object in AD
 Start-VM -Name "server1" -WaitSeconds 30
 
 Write-Host ""

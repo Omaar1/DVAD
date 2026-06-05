@@ -66,11 +66,11 @@ Set-ADAccountControl -Identity "svc_web" -TrustedToAuthForDelegation $true
 Write-Host "  [DELEG] svc_web: Constrained Delegation to CIFS/$dcShort (protocol transition)" -ForegroundColor Yellow
 
 # ============================================================================
-# CHAIN 6c: RBCD — l.garcia has GenericWrite on ADCS computer object
+# CHAIN 6c: RBCD - l.garcia has GenericWrite on ADCS computer object
 # Allows attacker to write msDS-AllowedToActOnBehalfOfOtherIdentity on ADCS.
 # ============================================================================
 Write-Host ""
-Write-Host "[Chain 6c] RBCD — l.garcia GenericWrite on ADCS$" -ForegroundColor Green
+Write-Host "[Chain 6c] RBCD - l.garcia GenericWrite on ADCS$" -ForegroundColor Green
 
 $adcsComputer = Get-ADComputer "ADCS" -ErrorAction SilentlyContinue
 if ($adcsComputer) {

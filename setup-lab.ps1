@@ -344,7 +344,7 @@ Write-Host ""
 Set-Location $labPath
 $log = "$labPath\setup.log"
 
-Write-Status "Step 1/3 — Starting RootDC (domain controller)..."
+Write-Status "Step 1/3 - Starting RootDC (domain controller)..."
 & vagrant up RootDC 2>&1 | Tee-Object -FilePath $log
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "RootDC failed. Check log: $log"
@@ -353,7 +353,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Ok "RootDC up. Waiting 90s for AD services to settle..."
 Start-Sleep -Seconds 90
 
-Write-Status "Step 2/3 — Starting ADCS_server and SCCM_server..."
+Write-Status "Step 2/3 - Starting ADCS_server and SCCM_server..."
 & vagrant up ADCS_server SCCM_server 2>&1 | Tee-Object -FilePath $log -Append
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "ADCS_server or SCCM_server failed. Check log: $log"
@@ -362,7 +362,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Ok "ADCS and SCCM up. Waiting 60s..."
 Start-Sleep -Seconds 60
 
-Write-Status "Step 3/3 — Starting server1..."
+Write-Status "Step 3/3 - Starting server1..."
 & vagrant up server1 2>&1 | Tee-Object -FilePath $log -Append
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "server1 failed. Check log: $log"
