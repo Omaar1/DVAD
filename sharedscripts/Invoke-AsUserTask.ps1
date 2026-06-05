@@ -69,8 +69,14 @@ catch { `$_.Exception.Message | Out-File "$log" -Append; "FAILED" | Out-File "$s
     # battery (Win32_Battery BatteryStatus=1 "on battery"), so the on-demand instance
     # sticks in "Queued" forever (TaskScheduler event 325) and never runs the action.
     # Clear the battery guard; everything else keeps the schtasks defaults.
+    # Set-ScheduledTask re-registers the task, which drops a stored password, so the
+    # user path must re-supply -User/-Password or the Administrator logon fails.
     $set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-    Set-ScheduledTask -TaskName $Name -Settings $set -ErrorAction SilentlyContinue | Out-Null
+    if ([string]::IsNullOrWhiteSpace($User) -or $User -eq 'SYSTEM') {
+        Set-ScheduledTask -TaskName $Name -Settings $set -ErrorAction SilentlyContinue | Out-Null
+    } else {
+        Set-ScheduledTask -TaskName $Name -Settings $set -User $User -Password $Password -ErrorAction SilentlyContinue | Out-Null
+    }
 
     schtasks /run /tn $Name 2>&1 | Out-Null
 
