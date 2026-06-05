@@ -25,9 +25,9 @@ function Save-SetupLog {
 }
 
 # --- CONFIGURATION ---
-# NOTE: setup.exe reads the site code/name from ConfigMgrAutoSave.ini. Keep that
-# INI's [Identification] SiteCode in sync with sccm.siteCode in lab-config.json;
-# the values below are used for post-install WMI checks against site_$SiteCode.
+# NOTE: setup.exe reads the site code/name/server from ConfigMgrAutoSave.ini, which
+# duplicates values in lab-config.json. The preflight below asserts they match so a
+# drifted INI fails fast here instead of as a confusing ~40-min install failure.
 . C:\vagrant\sharedscripts\Get-LabConfig.ps1
 $cfg = Get-LabConfig
 $SiteCode = $cfg.sccm.siteCode
@@ -44,6 +44,41 @@ $ShareRoot = "C:\vagrant\sharedscripts\services\SCCM\MECM_Setup"
 $ShareMedia = "$ShareRoot\Media"
 $SharePrereqs = "$ShareRoot\Prereqs"
 $IniFile = "$ShareRoot\ConfigMgrAutoSave.ini"
+
+# --- PREFLIGHT: assert the answer file matches lab-config.json ---
+# ConfigMgrAutoSave.ini is a static answer file whose values duplicate lab-config.json.
+# Fail fast here if they have drifted apart, rather than letting setup.exe build the
+# site with stale values (a confusing failure ~40 minutes in).
+$SccmFqdn = "$($cfg.hosts.sccm.name).$($cfg.domain.fqdn)"
+$expectedIni = [ordered]@{
+    'SiteCode'             = $SiteCode
+    'SiteName'             = $SiteName
+    'SDKServer'            = $SccmFqdn
+    'ManagementPoint'      = $SccmFqdn
+    'DistributionPoint'    = $SccmFqdn
+    'SQLServerName'        = $SccmFqdn
+    'DatabaseName'         = "CM_$SiteCode"
+    'CloudConnectorServer' = $SccmFqdn
+}
+if (-not (Test-Path $IniFile)) { throw "MECM answer file not found: $IniFile" }
+$iniLines   = Get-Content -Path $IniFile
+$iniMismatch = @()
+foreach ($key in $expectedIni.Keys) {
+    $line = $iniLines | Where-Object { $_ -match "^\s*$key\s*=" } | Select-Object -First 1
+    if (-not $line) {
+        $iniMismatch += "  $key : MISSING in INI (expected '$($expectedIni[$key])')"
+        continue
+    }
+    $actual = ($line -split '=', 2)[1].Trim()
+    if ($actual -ne $expectedIni[$key]) {
+        $iniMismatch += "  $key : INI has '$actual' but lab-config expects '$($expectedIni[$key])'"
+    }
+}
+if ($iniMismatch.Count -gt 0) {
+    throw ("ConfigMgrAutoSave.ini is out of sync with lab-config.json:`n" + ($iniMismatch -join "`n") +
+        "`nEdit sharedscripts/services/SCCM/MECM_Setup/ConfigMgrAutoSave.ini to match lab-config.json, then re-run.")
+}
+Write-Host " [OK] ConfigMgrAutoSave.ini matches lab-config.json (site $SiteCode, server $SccmFqdn)." -ForegroundColor Green
 
 # --- STEP 0: FIX NETWORK & DNS ---
 Start-PhaseTimer -PhaseName "VERIFYING CONNECTIVITY"

@@ -221,8 +221,7 @@ SilentRUN-Lab/
 ├── provision/
 │   └── variables/
 │       ├── lab-config.json                  # Single source of truth: domain, hosts/IPs, box, SCCM settings
-│       ├── lab-users.json                   # OUs, groups, departmental users + service accounts
-│       └── dns_entries.csv                  # DNS records
+│       └── lab-users.json                   # OUs, groups, departmental users + service accounts
 └── sharedscripts/
     ├── Get-LabConfig.ps1                    # Loads lab-config.json (dot-source, then Get-LabConfig)
     ├── ps.ps1                               # PowerShell execution wrapper
@@ -230,15 +229,16 @@ SilentRUN-Lab/
     │   ├── install-forest.ps1               # Forest and root domain setup
     │   ├── join-domain.ps1                  # Domain join automation
     │   ├── create-ad-objects.ps1            # OU, user, and group creation
-    │   ├── configure-attack-paths.ps1       # ACL chains, Kerberoast, AS-REP, GMSA, LAPS
-    │   └── configure-machine-attacks.ps1    # Delegation, RBCD (runs on SVR1)
+    │   ├── install-laps-schema.ps1          # LAPS schema extension (official AdmPwd.PS module)
+    │   ├── configure-attack-paths.ps1       # ACL chains, Kerberoast, AS-REP, GMSA
+    │   └── configure-machine-attacks.ps1    # Delegation, RBCD, LAPS password (runs on SVR1)
     ├── networking/
     │   └── configure-network.ps1            # All networking (Policy/MemberDns/RootDcDns/NatInternetDns)
     ├── windows/
     │   └── provision-base.ps1               # Base OS configuration
     ├── tools/
-    │   ├── anonBind.ps1                     # Anonymous LDAP bind (dSHeuristics)
-    │   └── null-session.ps1                 # Null session share configuration
+    │   ├── anonBind.ps1                     # LDAP anonymous bind (dSHeuristics) - wired into RootDC
+    │   └── null-session.ps1                 # SMB null-session enumeration - wired into RootDC
     └── services/
         ├── ADCS/
         │   ├── install-adcs.ps1             # CA install + ESC1-4 template deployment

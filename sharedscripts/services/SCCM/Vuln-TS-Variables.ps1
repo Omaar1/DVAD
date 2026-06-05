@@ -93,7 +93,7 @@ try {
 
     # 3. Add Domain Join Step (The Vulnerability)
     $SecurePassword = ConvertTo-SecureString -String $JoinPassword -AsPlainText -Force
-    $JoinStep = New-CMTSStepJoinDomainWorkgroup -Name "Join Domain (Vulnerable)" -DomainName $DomainName -OU "LDAP://CN=Computers,DC=silent,DC=run" -UserName $JoinAccount -UserPassword $SecurePassword
+    $JoinStep = New-CMTSStepJoinDomainWorkgroup -Name "Join Domain (Vulnerable)" -DomainName $DomainName -OU "LDAP://CN=Computers,$($cfg.domain.dn)" -UserName $JoinAccount -UserPassword $SecurePassword
     Add-CMTaskSequenceStep -TaskSequenceName $TSName_Auth -Step $JoinStep
 
     # 4. Deploy

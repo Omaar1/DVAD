@@ -13,6 +13,7 @@
 
 Import-Module ActiveDirectory -ErrorAction Stop
 . C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
+. C:\vagrant\sharedscripts\ad\Set-AdAce.ps1
 
 $domainDN  = (Get-ADDomain).DistinguishedName
 $domainDNS = (Get-ADDomain).DNSRoot
@@ -51,7 +52,6 @@ function Set-ADObjectACE {
         'All-Extended-Rights'        = [GUID]'00000000-0000-0000-0000-000000000000'
     }
 
-    $acl   = $target.psbase.ObjectSecurity
     $allow = [System.Security.AccessControl.AccessControlType]::Allow
 
     switch ($RightType) {
@@ -104,10 +104,11 @@ function Set-ADObjectACE {
         }
     }
 
-    $acl.AddAccessRule($ace)
-    $target.psbase.CommitChanges()
-
-    Write-Host "  [ACL] $PrincipalSAM -> $RightType on $(($TargetDN -split ',')[0])" -ForegroundColor DarkYellow
+    if (Add-AdAceIfMissing -DirectoryEntry $target -Ace $ace) {
+        Write-Host "  [ACL] $PrincipalSAM -> $RightType on $(($TargetDN -split ',')[0])" -ForegroundColor DarkYellow
+    } else {
+        Write-Host "  [ACL] $PrincipalSAM -> $RightType on $(($TargetDN -split ',')[0]) (already present)" -ForegroundColor DarkGray
+    }
 }
 
 # ============================================================================
@@ -191,6 +192,7 @@ Write-Host "[Chain 5] GMSA/DCSync chain (d.patel -> GMSA-Readers -> gmsa_svc$ ->
 
 $gmsaScript = @"
 Import-Module ActiveDirectory
+. C:\vagrant\sharedscripts\ad\Set-AdAce.ps1
 `$domainDNS = (Get-ADDomain).DNSRoot
 `$domainDN  = (Get-ADDomain).DistinguishedName
 
@@ -212,10 +214,8 @@ Set-ADServiceAccount "gmsa_svc" -PrincipalsAllowedToRetrieveManagedPassword "GMS
 `$guidReplAll = [GUID]"1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
 `$aceRepl    = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(`$gmsaSID, "ExtendedRight", "Allow", `$guidRepl)
 `$aceReplAll = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(`$gmsaSID, "ExtendedRight", "Allow", `$guidReplAll)
-`$acl = `$dcObj.psbase.ObjectSecurity
-`$acl.AddAccessRule(`$aceRepl)
-`$acl.AddAccessRule(`$aceReplAll)
-`$dcObj.psbase.CommitChanges()
+Add-AdAceIfMissing -DirectoryEntry `$dcObj -Ace `$aceRepl | Out-Null
+Add-AdAceIfMissing -DirectoryEntry `$dcObj -Ace `$aceReplAll | Out-Null
 
 "DONE" | Out-File C:\gmsa_setup_status.txt
 "@
@@ -233,70 +233,15 @@ Write-Host "  [OK] WriteOwner -> GMSA -> DCSync chain ready" -ForegroundColor Gr
 
 # ============================================================================
 # CHAIN 7: AllExtendedRights -> LAPS -> Lateral Movement
-# t.brown -> AllExtendedRights on SVR1$ -> can read LAPS password -> local admin on SVR1
-# LAPS schema extension runs via scheduled task (requires Schema Admin context)
+# t.brown -> AllExtendedRights on SVR1$ -> can read LAPS password -> local admin on SVR1.
+# Both halves run after SVR1 joins (it does not exist yet at this point):
+#   - The AD schema is extended by install-laps-schema.ps1 (runs earlier on this DC
+#     via the official AdmPwd.PS module).
+#   - The AllExtendedRights ACE and SVR1's ms-Mcs-AdmPwd value are set by
+#     configure-machine-attacks.ps1, which runs on SVR1 as the last lab step.
 # ============================================================================
 Write-Host ""
-Write-Host "[Chain 7] LAPS / AllExtendedRights (t.brown -> SVR1$)" -ForegroundColor Green
-
-$lapsScript = @"
-Import-Module ActiveDirectory
-`$schemaPath = (Get-ADRootDSE).schemaNamingContext
-
-`$attr1 = Get-ADObject -SearchBase `$schemaPath -Filter { lDAPDisplayName -eq "ms-Mcs-AdmPwd" } -ErrorAction SilentlyContinue
-if (-not `$attr1) {
-    New-ADObject -Name "ms-Mcs-AdmPwd" -Type "attributeSchema" -Path `$schemaPath -OtherAttributes @{
-        lDAPDisplayName = "ms-Mcs-AdmPwd"; adminDisplayName = "ms-Mcs-AdmPwd"
-        attributeID     = "1.2.840.113556.1.8000.2554.50051.45980.28112.18903.35903.6685103.1224907.2.1"
-        attributeSyntax = "2.5.5.5"; oMSyntax = 22; isSingleValued = `$true; searchFlags = 904
-    }
-}
-
-`$attr2 = Get-ADObject -SearchBase `$schemaPath -Filter { lDAPDisplayName -eq "ms-Mcs-AdmPwdExpirationTime" } -ErrorAction SilentlyContinue
-if (-not `$attr2) {
-    New-ADObject -Name "ms-Mcs-AdmPwdExpirationTime" -Type "attributeSchema" -Path `$schemaPath -OtherAttributes @{
-        lDAPDisplayName = "ms-Mcs-AdmPwdExpirationTime"; adminDisplayName = "ms-Mcs-AdmPwdExpirationTime"
-        attributeID     = "1.2.840.113556.1.8000.2554.50051.45980.28112.18903.35903.6685103.1224907.2.2"
-        attributeSyntax = "2.5.5.16"; oMSyntax = 65; isSingleValued = `$true; searchFlags = 0
-    }
-}
-
-`$dse = [ADSI]"LDAP://RootDSE"
-`$dse.Put("schemaUpdateNow", 1)
-`$dse.SetInfo()
-Start-Sleep -Seconds 5
-
-`$computerClass = Get-ADObject -SearchBase `$schemaPath -Filter { lDAPDisplayName -eq "computer" } -Properties mayContain
-if (`$computerClass) {
-    Set-ADObject `$computerClass -Add @{ mayContain = @("ms-Mcs-AdmPwd", "ms-Mcs-AdmPwdExpirationTime") } -ErrorAction SilentlyContinue
-    `$dse.Put("schemaUpdateNow", 1)
-    `$dse.SetInfo()
-    Start-Sleep -Seconds 3
-}
-
-`$svr1 = Get-ADComputer "SVR1" -ErrorAction SilentlyContinue
-if (`$svr1) {
-    Set-ADComputer "SVR1" -Replace @{ "ms-Mcs-AdmPwd" = "L@ps#R4ndom2025!" } -ErrorAction SilentlyContinue
-}
-
-"DONE" | Out-File C:\laps_setup_status.txt
-"@
-if (Invoke-AsUserTask -Name "SetupLAPS" -ScriptContent $lapsScript -User "$netbios\Administrator" -Password $adminPw -TimeoutSec 120) {
-    Write-Host "  [LAPS] Schema extended and SVR1 password set"
-} else {
-    Write-Host "  [WARN] LAPS setup failed or timed out - SVR1 may not have joined yet (AllExtendedRights still set)" -ForegroundColor Yellow
-}
-
-$svr1 = $null
-try { $svr1 = Get-ADComputer "SVR1" -ErrorAction Stop } catch { }
-if ($svr1) {
-    Set-ADObjectACE -TargetDN $svr1.DistinguishedName -PrincipalSAM "t.brown" -RightType "AllExtendedRights"
-    Write-Host "  [OK] t.brown: AllExtendedRights on SVR1$" -ForegroundColor Green
-} else {
-    Write-Host "  [WARN] SVR1 not in AD yet - AllExtendedRights will be set by configure-machine-attacks.ps1" -ForegroundColor Yellow
-}
-
-Write-Host "  [OK] AllExtendedRights -> LAPS chain ready" -ForegroundColor Green
+Write-Host "[Chain 7] LAPS / AllExtendedRights -> deferred to configure-machine-attacks.ps1 (after SVR1 joins)" -ForegroundColor Green
 
 # ============================================================================
 # ADDITIONAL GROUP MEMBERSHIPS
@@ -325,24 +270,8 @@ foreach ($u in $fsUsers) {
 }
 Write-Host "  [GROUP] File-Share-Access populated"
 
-# ============================================================================
-# ANONYMOUS LDAP BIND (dSHeuristics)
-# ============================================================================
-Write-Host ""
-Write-Host "[Extra] Configuring anonymous LDAP bind..." -ForegroundColor Green
-
-# Writing to the Configuration NC needs a real batch token; the inline WinRM
-# token gets "Access is denied". Run it via a scheduled task like GMSA/LAPS.
-$anonScript = @"
-`$dircfg = [ADSI]"LDAP://CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,$domainDN"
-`$dircfg.put("dSHeuristics", "0000002")
-`$dircfg.SetInfo()
-"@
-if (Invoke-AsUserTask -Name "SetAnonBind" -ScriptContent $anonScript -User "$netbios\Administrator" -Password $adminPw -TimeoutSec 60) {
-    Write-Host "  [ANON] dSHeuristics set - anonymous LDAP queries enabled" -ForegroundColor Yellow
-} else {
-    Write-Host "  [WARN] Could not set dSHeuristics (see SetAnonBind log)" -ForegroundColor Red
-}
+# Anonymous LDAP bind (dSHeuristics) and SMB null-session are applied by their own
+# wired-in steps that run after this script: tools/anonBind.ps1 and tools/null-session.ps1.
 
 # ============================================================================
 # SUMMARY

@@ -117,10 +117,20 @@ $remoteScriptBlock = {
         # Create the Rule using the strictly typed variables
         $Ar = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($Identity, $AdRights, $AccessType, $Inheritance)
         
-        $Acl.AddAccessRule($Ar)
-        Set-Acl -Path "AD:\$ContainerDN" -AclObject $Acl
-        
-        Write-Host " [SUCCESS] Granted Full Control to $($SCCMComp.Name) on System Management." -ForegroundColor Green
+        $already = $Acl.GetAccessRules($true, $false, [System.Security.Principal.SecurityIdentifier]) | Where-Object {
+            $_.IdentityReference.Value -eq $SidStr -and
+            $_.ActiveDirectoryRights   -eq $AdRights -and
+            $_.AccessControlType       -eq $AccessType -and
+            $_.ObjectType              -eq ([guid]::Empty)
+        }
+        if ($already) {
+            Write-Host " [SKIP] $($SCCMComp.Name) already has Full Control on System Management." -ForegroundColor Green
+        }
+        else {
+            $Acl.AddAccessRule($Ar)
+            Set-Acl -Path "AD:\$ContainerDN" -AclObject $Acl
+            Write-Host " [SUCCESS] Granted Full Control to $($SCCMComp.Name) on System Management." -ForegroundColor Green
+        }
     }
     catch {
         Write-Error " [FAIL] Failed to set permissions on System Management container: $_"

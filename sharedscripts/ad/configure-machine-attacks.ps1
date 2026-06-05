@@ -22,6 +22,7 @@ if (-not (Get-WindowsFeature RSAT-AD-PowerShell).Installed) {
 
 $innerScript = @'
 Import-Module ActiveDirectory -ErrorAction Stop
+. C:\vagrant\sharedscripts\ad\Set-AdAce.ps1
 
 $domainDN  = (Get-ADDomain).DistinguishedName
 $domainDNS = (Get-ADDomain).DNSRoot
@@ -80,9 +81,7 @@ if ($adcsComputer) {
     $rights    = [System.DirectoryServices.ActiveDirectoryRights]::GenericWrite
     $ace       = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, $rights, $allow)
     $target    = [ADSI]"LDAP://$adcsDN"
-    $acl       = $target.psbase.ObjectSecurity
-    $acl.AddAccessRule($ace)
-    $target.psbase.CommitChanges()
+    Add-AdAceIfMissing -DirectoryEntry $target -Ace $ace | Out-Null
     Write-Host "  [RBCD] l.garcia: GenericWrite on ADCS$ (can configure RBCD)" -ForegroundColor Yellow
 } else {
     Write-Host "  [WARN] ADCS computer object not found" -ForegroundColor Red
@@ -108,10 +107,15 @@ if ($svr1) {
         $guidAll
     )
     $target    = [ADSI]"LDAP://$($svr1.DistinguishedName)"
-    $acl       = $target.psbase.ObjectSecurity
-    $acl.AddAccessRule($ace)
-    $target.psbase.CommitChanges()
+    Add-AdAceIfMissing -DirectoryEntry $target -Ace $ace | Out-Null
     Write-Host "  [LAPS] t.brown: AllExtendedRights on SVR1$ set" -ForegroundColor Yellow
+
+    # Plant a known LAPS password on SVR1 so the attack is demonstrable without
+    # deploying the LAPS client. ms-Mcs-AdmPwd is confidential; t.brown's
+    # AllExtendedRights (above) is what allows reading it. The schema attribute
+    # was registered earlier on the DC by install-laps-schema.ps1.
+    Set-ADComputer "SVR1" -Replace @{ "ms-Mcs-AdmPwd" = "L@ps#R4ndom2025!" } -ErrorAction SilentlyContinue
+    Write-Host "  [LAPS] SVR1 ms-Mcs-AdmPwd value planted" -ForegroundColor Yellow
 }
 
 Write-Host ""

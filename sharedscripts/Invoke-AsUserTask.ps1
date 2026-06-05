@@ -78,11 +78,11 @@ catch { `$_.Exception.Message | Out-File "$log" -Append; "FAILED" | Out-File "$s
     if (Test-Path $status) {
         $result = (Get-Content $status -Raw).Trim()
         Write-Host "  [$Name] status: $result"
-        if (Test-Path $log) { Get-Content $log }
+        if (Test-Path $log) { Get-Content $log | Write-Host }
         $ok = ($result -eq 'SUCCESS')
     } else {
         Write-Host "  [$Name] timed out after $TimeoutSec s" -ForegroundColor Red
-        if (Test-Path $log) { Get-Content $log }
+        if (Test-Path $log) { Get-Content $log | Write-Host }
     }
 
     schtasks /delete /tn $Name /f 2>&1 | Out-Null

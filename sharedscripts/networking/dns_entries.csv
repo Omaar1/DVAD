@@ -1,9 +1,0 @@
-HostName,IPEnd
-example,"200"
-SRV1,"150"
-WRK1,"200"
-something.silent.run,"101"
-silent.run,"100"
-adcs,"103"
-sccm,"104"
-

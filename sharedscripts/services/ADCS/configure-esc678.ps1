@@ -38,6 +38,7 @@ Write-Host "`n[*] === ESC5: GenericAll on CA AD object for l.garcia ===" -Foregr
 # local CertSvc registry itself (single-quoted here-string: nothing expands here).
 $esc5Script = @'
 Import-Module ActiveDirectory -ErrorAction Stop
+. C:\vagrant\sharedscripts\ad\Set-AdAce.ps1
 $caName     = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration" -Name Active).Active
 $domainDN   = (Get-ADDomain).DistinguishedName
 $caObjectDN = "CN=$caName,CN=Enrollment Services,CN=Public Key Services,CN=Services,CN=Configuration,$domainDN"
@@ -50,8 +51,7 @@ $ace     = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
     [System.DirectoryServices.ActiveDirectoryRights]::GenericAll,
     [System.Security.AccessControl.AccessControlType]::Allow,
     [System.DirectoryServices.ActiveDirectorySecurityInheritance]::None)
-$target.psbase.ObjectSecurity.AddAccessRule($ace)
-$target.psbase.CommitChanges()
+Add-AdAceIfMissing -DirectoryEntry $target -Ace $ace | Out-Null
 Write-Host "[+] l.garcia: GenericAll on CA AD object ($caName)"
 '@
 

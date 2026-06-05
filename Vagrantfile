@@ -67,7 +67,19 @@ Vagrant.configure("2") do |cfg_vm|
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 RootDcDns"
 
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/create-ad-objects.ps1 lab-users.json"
+
+      # Extend the AD schema with the legacy LAPS attributes (official AdmPwd.PS
+      # module). Runs on the schema master; SVR1's ms-Mcs-AdmPwd value is planted
+      # later by configure-machine-attacks.ps1 once SVR1 has joined.
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/install-laps-schema.ps1"
+
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/configure-attack-paths.ps1"
+
+      # Anonymous access attack surface: LDAP anonymous bind (dSHeuristics) and SMB
+      # null-session enumeration. Applied before the final reboot so the LSA/SMB
+      # registry changes take effect.
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/tools/anonBind.ps1"
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/tools/null-session.ps1"
 
       # Final reboot to settle configuration
       config.vm.provision "shell", reboot: true

@@ -16,10 +16,31 @@ $DownloadTarget = "C:\vagrant\sharedscripts\services\SCCM\SQL-offline"
 $InstanceName = "MSSQLSERVER"
 $Collation = "SQL_Latin1_General_CP1_CI_AS"
 
+# --- STEP 0: FAST IDEMPOTENCY CHECK ---
+# If SQL is already installed and healthy (running, or registered and startable),
+# skip media preparation entirely - avoids re-downloading/mounting a ~1.5 GB ISO on
+# a re-provision. STEP 2 below still re-detects and decides install vs repair.
+$AlreadyHealthy = $false
+$existingSvc0 = Get-Service $InstanceName -ErrorAction SilentlyContinue
+if ($existingSvc0) {
+    if ($existingSvc0.Status -eq 'Running') {
+        $AlreadyHealthy = $true
+    }
+    else {
+        try { Start-Service $InstanceName -ErrorAction Stop; $AlreadyHealthy = $true } catch { $AlreadyHealthy = $false }
+    }
+}
+
 # --- STEP 1: PREPARE INSTALLER ---
 Start-PhaseTimer -PhaseName "PREPARING SQL INSTALLER"
 $SetupExe = "$LocalSource\setup.exe"
 $InstallCommand = ""
+$IsoWasMounted  = $false
+
+if ($AlreadyHealthy) {
+    Write-Host "[SKIP] SQL already installed and healthy - skipping media preparation." -ForegroundColor Green
+}
+else {
 
 # PREREQUISITES
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -80,6 +101,8 @@ else {
 
     $InstallCommand = "$($DriveLetter):\setup.exe"
     Write-Host " [OK] Media Mounted on $($DriveLetter):\" -ForegroundColor Green
+    $IsoWasMounted = $true
+}
 }
 Stop-PhaseTimer -Status Success
 
@@ -237,8 +260,11 @@ if ($Port) {
     Write-Host "[OK] Port 1433 is Listening." -ForegroundColor Green
 }
 
-# Dismount ISO after starting (no longer needed)
-Dismount-DiskImage -ImagePath $LocalISO | Out-Null
+# Dismount the ISO only if we actually mounted one (skipped on the extracted-media
+# and already-installed paths, where $LocalISO was never mounted).
+if ($IsoWasMounted) {
+    Dismount-DiskImage -ImagePath $LocalISO -ErrorAction SilentlyContinue | Out-Null
+}
 
 Stop-PhaseTimer -Status Success
 

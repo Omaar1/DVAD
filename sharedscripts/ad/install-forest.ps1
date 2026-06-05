@@ -95,11 +95,16 @@ $hostEntries = @(
 # Path to the hosts file
 $hostsFilePath = "C:\Windows\System32\drivers\etc\hosts"
 
-# Add each entry to the hosts file
+# Add each entry to the hosts file (idempotent: skip lines already present)
+$hostsContent = Get-Content -Path $hostsFilePath -ErrorAction SilentlyContinue
 foreach ($entry in $hostEntries) {
     $line = "$($entry.IPAddress) $($entry.Hostname)"
-    Add-Content -Path $hostsFilePath -Value $line
-    Write-Host " [OK] Added hosts entry: $line" -ForegroundColor Green
+    if ($hostsContent -contains $line) {
+        Write-Host " [SKIP] hosts entry already present: $line" -ForegroundColor DarkGray
+    } else {
+        Add-Content -Path $hostsFilePath -Value $line
+        Write-Host " [OK] Added hosts entry: $line" -ForegroundColor Green
+    }
 }
 
 # Disable firewalls!
