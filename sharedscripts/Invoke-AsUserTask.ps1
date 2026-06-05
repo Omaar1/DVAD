@@ -64,6 +64,14 @@ catch { `$_.Exception.Message | Out-File "$log" -Append; "FAILED" | Out-File "$s
     } else {
         schtasks /create /f /tn $Name /sc once /sd $startDate /st 00:00 /rl highest /ru $User /rp $Password /tr $tr 2>&1 | Out-Null
     }
+
+    # schtasks defaults DisallowStartIfOnBatteries=True. These VMs expose a phantom
+    # battery (Win32_Battery BatteryStatus=1 "on battery"), so the on-demand instance
+    # sticks in "Queued" forever (TaskScheduler event 325) and never runs the action.
+    # Clear the battery guard; everything else keeps the schtasks defaults.
+    $set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+    Set-ScheduledTask -TaskName $Name -Settings $set -ErrorAction SilentlyContinue | Out-Null
+
     schtasks /run /tn $Name 2>&1 | Out-Null
 
     $elapsed = 0
