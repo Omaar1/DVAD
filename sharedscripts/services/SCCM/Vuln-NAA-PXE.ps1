@@ -267,31 +267,9 @@ try {
 
         Write-Host " [INFO] Processing boot image '$($BootImg.Name)'..." -ForegroundColor Gray
 
-if ($EnablePxe) {
-    # Re-resolve a FULL object by Name. Set-CMBootImage's WinPE-version gate reads
-    # the InputObject's OWN ImageOSVersion; the -Id (lazy) object leaves it empty
-    # even when we can read 10.x off it, so the cmdlet throws a false "legacy WinPE
-    # 3.1" error. -Name hydrates it. Poll in case the SMS Provider lags on a fresh site.
-    $fullImg = $null
-    for ($i = 0; $i -lt 12; $i++) {
-        $fullImg = Get-CMBootImage -Name $BootImg.Name
-        if (-not [string]::IsNullOrWhiteSpace($fullImg.ImageOSVersion)) { break }
-        Start-Sleep -Seconds 5
-    }
-    $osVer = $fullImg.ImageOSVersion
-    Write-Host " [INFO] Resolved ImageOSVersion='$osVer' after wait." -ForegroundColor Gray
-
-    $isLegacy = ($osVer -like "6.0.*" -or $osVer -like "6.1.*")
-    if (-not $isLegacy) {
-        Set-CMBootImage -InputObject $fullImg -DeployFromPxeDistributionPoint $true -ErrorAction Stop
-        Write-Host " [OK] PXE deploy flag set (WinPE $osVer)." -ForegroundColor Green
-    }
-    else {
-        Write-Host " [SKIP] '$($fullImg.Name)' is legacy WinPE ($osVer); not PXE-enabling." -ForegroundColor Yellow
-    }
-}
-
-        # Distribute to DP
+        # Distribute to the DP FIRST so the boot WIM is staged regardless of whether the
+        # PXE-deploy flag set succeeds. (Previously a failure in the PXE block threw out
+        # of this function and skipped distribution, leaving the x64 WIM off the DP.)
         try {
             Start-CMContentDistribution -BootImageId $BootImg.PackageID -DistributionPointName $SiteServer -ErrorAction Stop
             Write-Host " [OK] Distribution started." -ForegroundColor Green
@@ -301,6 +279,38 @@ if ($EnablePxe) {
                 Write-Host " [INFO] Already distributed." -ForegroundColor Gray
             }
             else { throw }
+        }
+
+        if (-not $EnablePxe) { return }
+
+        # Enable "Deploy this boot image from the PXE-enabled DP". Set-CMBootImage's
+        # WinPE-version gate has falsely rejected fully-resolved WinPE 10 images passed
+        # via -InputObject ("legacy WinPE 3.1 or earlier"). Driving the cmdlet by -Name
+        # forces it to load the image server-side (the same fix the -Name Get uses); we
+        # also retry in case the SMS Provider lags right after a fresh site install.
+        # Non-fatal: the WIM is already distributed above.
+        $pxeSet = $false
+        for ($i = 0; $i -lt 4; $i++) {
+            $img   = Get-CMBootImage -Name $BootImg.Name
+            $osVer = $img.ImageOSVersion
+            if ($osVer -like "6.0.*" -or $osVer -like "6.1.*") {
+                Write-Host " [SKIP] '$($BootImg.Name)' is genuinely legacy WinPE ($osVer); not PXE-enabling." -ForegroundColor Yellow
+                $pxeSet = $true
+                break
+            }
+            try {
+                Set-CMBootImage -Name $BootImg.Name -DeployFromPxeDistributionPoint $true -ErrorAction Stop
+                Write-Host " [OK] PXE deploy flag set on '$($BootImg.Name)' (WinPE $osVer)." -ForegroundColor Green
+                $pxeSet = $true
+                break
+            }
+            catch {
+                Write-Host " [RETRY $($i + 1)/4] PXE flag set failed (WinPE '$osVer'): $($_.Exception.Message)" -ForegroundColor DarkGray
+                Start-Sleep -Seconds 20
+            }
+        }
+        if (-not $pxeSet) {
+            Write-Warning "Could not set the PXE-deploy flag on '$($BootImg.Name)' after retries; PXE boot of this image may not work. The boot image IS distributed to the DP."
         }
     }
 
