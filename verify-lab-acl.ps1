@@ -11,10 +11,11 @@ Import-Module GroupPolicy -ErrorAction SilentlyContinue
 $dn      = (Get-ADDomain).DistinguishedName
 $dnsRoot = (Get-ADDomain).DNSRoot
 $usersJson = "C:\vagrant\provision\variables\lab-users.json"
-$PASS = 0; $FAIL = 0
+$PASS = 0; $FAIL = 0; $SKIP = 0
 
 function ok([string]$m)  { $script:PASS++; Write-Host "  [PASS] $m" -ForegroundColor Green }
 function no([string]$m)  { $script:FAIL++; Write-Host "  [FAIL] $m" -ForegroundColor Red }
+function skip([string]$m){ $script:SKIP++; Write-Host "  [SKIP] $m" -ForegroundColor Yellow }
 function chk([string]$m,[bool]$c){ if ($c) { ok $m } else { no $m } }
 function head([string]$m){ Write-Host "`n== $m ==" -ForegroundColor Cyan }
 
@@ -96,17 +97,28 @@ chk "gmsa_svc exists" ([bool](Get-ADServiceAccount gmsa_svc -EA SilentlyContinue
 chk "DCSync repl gmsa_svc -> domain root"     (Test-Ace 'gmsa_svc' $dn ExtendedRight $G_REPL)
 chk "DCSync repl-all gmsa_svc -> domain root" (Test-Ace 'gmsa_svc' $dn ExtendedRight $G_RALL)
 
-head "Chain 6 - Delegation"
-chk "SVR1 unconstrained (TrustedForDelegation)" ((Get-ADComputer SVR1 -Properties TrustedForDelegation).TrustedForDelegation)
-$web = Get-ADUser svc_web -Properties 'msDS-AllowedToDelegateTo',TrustedToAuthForDelegation
-chk "svc_web constrained delegation set" ([bool]$web.'msDS-AllowedToDelegateTo')
-chk "svc_web protocol transition"        ($web.TrustedToAuthForDelegation)
-chk "GenericWrite l.garcia -> ADCS$ (RBCD target)" (Test-Ace 'l.garcia' (Get-ADComputer ADCS).DistinguishedName GenericWrite)
+head "Chain 6 - Delegation (set by configure-machine-attacks.ps1 on server1)"
+$svr1 = Get-ADComputer SVR1 -Properties TrustedForDelegation -EA SilentlyContinue
+$adcsC = Get-ADComputer ADCS -EA SilentlyContinue
+if ($svr1) {
+    chk "SVR1 unconstrained (TrustedForDelegation)" ($svr1.TrustedForDelegation)
+    $web = Get-ADUser svc_web -Properties 'msDS-AllowedToDelegateTo',TrustedToAuthForDelegation
+    chk "svc_web constrained delegation set" ([bool]$web.'msDS-AllowedToDelegateTo')
+    chk "svc_web protocol transition"        ($web.TrustedToAuthForDelegation)
+    if ($adcsC) { chk "GenericWrite l.garcia -> ADCS$ (RBCD target)" (Test-Ace 'l.garcia' $adcsC.DistinguishedName GenericWrite) }
+    else        { skip "ADCS computer not joined yet" }
+} else {
+    skip "SVR1 not joined yet - Chain 6 (SVR1/svc_web/l.garcia) is applied last on server1; re-run after it finishes"
+}
 chk "MachineAccountQuota = 10 (RBCD: attacker can add a computer)" (((Get-ADObject $dn -Properties 'ms-DS-MachineAccountQuota').'ms-DS-MachineAccountQuota') -eq 10)
 
-head "Chain 7 - LAPS"
-chk "AllExtendedRights t.brown -> SVR1$" (Test-Ace 't.brown' (Get-ADComputer SVR1).DistinguishedName ExtendedRight ([guid]::Empty))
-chk "SVR1 ms-Mcs-AdmPwd planted" ([bool](Get-ADComputer SVR1 -Properties 'ms-Mcs-AdmPwd').'ms-Mcs-AdmPwd')
+head "Chain 7 - LAPS (set by configure-machine-attacks.ps1 on server1)"
+if ($svr1) {
+    chk "AllExtendedRights t.brown -> SVR1$" (Test-Ace 't.brown' $svr1.DistinguishedName ExtendedRight ([guid]::Empty))
+    chk "SVR1 ms-Mcs-AdmPwd planted" ([bool](Get-ADComputer SVR1 -Properties 'ms-Mcs-AdmPwd').'ms-Mcs-AdmPwd')
+} else {
+    skip "SVR1 not joined yet - Chain 7 is applied last on server1; re-run after it finishes"
+}
 
 head "Chain 8 - Anonymous bind -> description leak"
 $dh = (Get-ADObject "CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,$dn" -Properties dSHeuristics).dSHeuristics
@@ -118,5 +130,5 @@ $ycPw   = User-Pw 'y.chen'
 chk "y.chen description leaks her password" ([bool]($ycDesc -and $ycPw -and $ycDesc.Contains($ycPw)))
 
 Write-Host "`n== Summary ==" -ForegroundColor Cyan
-Write-Host ("  PASS: {0}   FAIL: {1}" -f $PASS, $FAIL) -ForegroundColor $(if ($FAIL -eq 0) { 'Green' } else { 'Red' })
+Write-Host ("  PASS: {0}   FAIL: {1}   SKIP: {2}" -f $PASS, $FAIL, $SKIP) -ForegroundColor $(if ($FAIL -eq 0) { 'Green' } else { 'Red' })
 if ($FAIL -gt 0) { exit 1 } else { exit 0 }
