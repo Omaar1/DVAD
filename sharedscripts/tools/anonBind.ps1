@@ -26,12 +26,26 @@ $dcIp     = $cfg.hosts.rootdc.ip
 
 Start-PhaseTimer -PhaseName "ANONYMOUS LDAP BIND (dSHeuristics)"
 
-# 7th character of dSHeuristics = '2' allows anonymous LDAP bind/operations.
+# dSHeuristics "0000002001000001":
+#   - char 7  = '2' : allow anonymous LDAP bind/operations
+#   - char 16 = '1' : dwAdminSDExMask, exclude Account Operators from SDProp so the
+#                     Ch2 GenericWrite ACE on r.chen (an Account Operators member) is not
+#                     stripped hourly. char 10 = '1' is the required length marker.
 $anonScript = @"
+. C:\vagrant\sharedscripts\ad\Set-AdAce.ps1
 `$dircfg = [ADSI]"LDAP://CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,$domainDN"
-`$dircfg.put("dSHeuristics", "0000002")
+`$dircfg.put("dSHeuristics", "0000002001000001")
 `$dircfg.SetInfo()
-Write-Host "dSHeuristics set to 0000002 (anonymous LDAP bind enabled)."
+Write-Host "dSHeuristics set to 0000002001000001 (anon bind + Account Operators excluded from SDProp)."
+
+# Ch8: anonymous bind alone returns nothing - ANONYMOUS LOGON has no read access by
+# default. Grant it GenericRead on the domain head (inherited) so unauthenticated
+# clients can enumerate objects and read attributes like 'description'.
+`$root    = [ADSI]"LDAP://$domainDN"
+`$anonSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-7")
+`$readAce = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(`$anonSid, "GenericRead", "Allow", "All")
+Add-AdAceIfMissing -DirectoryEntry `$root -Ace `$readAce | Out-Null
+Write-Host "ANONYMOUS LOGON granted GenericRead on $domainDN (Ch8)."
 "@
 
 if (Invoke-AsUserTask -Name "SetAnonBind" -ScriptContent $anonScript -User "$netbios\Administrator" -Password $adminPw -TimeoutSec 60) {

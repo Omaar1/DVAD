@@ -129,21 +129,30 @@ Write-Host "  [OK] Kerberoastable Domain Admin ready" -ForegroundColor Green
 # -> Server-Admins WriteDACL on Domain Admins
 # ============================================================================
 Write-Host ""
-Write-Host "[Chain 2] AS-REP Roast chain (j.martinez -> r.chen -> Server-Admins -> DA)" -ForegroundColor Green
+Write-Host "[Chain 2] AS-REP Roast -> Shadow Credentials -> Account Operators (j.martinez -> r.chen)" -ForegroundColor Green
 
 Set-ADAccountControl -Identity "j.martinez" -DoesNotRequirePreAuth $true
 Write-Host "  [AS-REP] j.martinez: DoesNotRequirePreAuth = True" -ForegroundColor Yellow
 
-$rchenDN = (Get-ADUser r.chen).DistinguishedName
-Set-ADObjectACE -TargetDN $rchenDN -PrincipalSAM "j.martinez" -RightType "GenericWrite"
+# r.chen is a member of the builtin Account Operators (its power: account/group
+# control + DC logon). Account Operators is SDProp-protected, so r.chen would get
+# adminCount=1 and inheritance broken, wiping the GenericWrite ACE below. anonBind.ps1
+# already excluded Account Operators from SDProp (dSHeuristics char-16=1); clear any
+# stamp left from before that ran so the ACE persists.
+$rchen = Get-ADUser r.chen -Properties adminCount
+if ($rchen.adminCount) {
+    Set-ADUser r.chen -Clear adminCount
+    $rchenAcl = Get-Acl "AD:\$($rchen.DistinguishedName)"
+    $rchenAcl.SetAccessRuleProtection($false, $true)   # re-enable inheritance
+    Set-Acl "AD:\$($rchen.DistinguishedName)" $rchenAcl
+    Write-Host "  [SDProp] r.chen adminCount cleared, inheritance restored" -ForegroundColor Yellow
+}
 
-$serverAdminsDN = (Get-ADGroup "Server-Admins").DistinguishedName
-Set-ADObjectACE -TargetDN $serverAdminsDN -PrincipalSAM "r.chen" -RightType "WriteOwner"
+# GenericWrite lets j.martinez write msDS-KeyCredentialLink on r.chen (Shadow
+# Credentials) and authenticate as r.chen via PKINIT (lab has ADCS).
+Set-ADObjectACE -TargetDN $rchen.DistinguishedName -PrincipalSAM "j.martinez" -RightType "GenericWrite"
 
-$daGroupDN = (Get-ADGroup "Domain Admins").DistinguishedName
-Set-ADObjectACE -TargetDN $daGroupDN -PrincipalSAM "Server-Admins" -RightType "WriteDacl"
-
-Write-Host "  [OK] AS-REP -> GenericWrite -> WriteOwner -> WriteDACL chain ready" -ForegroundColor Green
+Write-Host "  [OK] AS-REP -> GenericWrite (Shadow Creds) -> Account Operators chain ready" -ForegroundColor Green
 
 # ============================================================================
 # CHAIN 3: GenericAll on Group -> GenericWrite on Service Account -> NTDS dump
@@ -151,17 +160,15 @@ Write-Host "  [OK] AS-REP -> GenericWrite -> WriteOwner -> WriteDACL chain ready
 # -> svc_backup is in Backup Operators (can dump NTDS)
 # ============================================================================
 Write-Host ""
-Write-Host "[Chain 3] GenericAll chain (a.johnson -> Helpdesk-Operators -> svc_backup)" -ForegroundColor Green
+Write-Host "[Chain 3] GPP cpassword -> Backup Operators (svc_backup -> offline NTDS via SeBackup)" -ForegroundColor Green
 
-$helpdeskDN = (Get-ADGroup "Helpdesk-Operators").DistinguishedName
-Set-ADObjectACE -TargetDN $helpdeskDN -PrincipalSAM "a.johnson" -RightType "GenericAll"
-
-$svcBackupDN = (Get-ADUser "svc_backup").DistinguishedName
-Set-ADObjectACE -TargetDN $svcBackupDN -PrincipalSAM "Helpdesk-Operators" -RightType "GenericWrite"
-
+# svc_backup's power is the builtin Backup Operators (SeBackup/SeRestore + DC logon),
+# which survives SDProp because it is group membership, not an ACE. svc_backup is
+# reached via the GPP cpassword planted in SYSVOL by configure-ch3-gpp.ps1, so it
+# needs NO inbound ACE (nothing for SDProp to strip).
 Add-ADGroupMember -Identity "Backup Operators" -Members "svc_backup" -ErrorAction SilentlyContinue
 Write-Host "  [GROUP] svc_backup added to Backup Operators"
-Write-Host "  [OK] GenericAll -> GenericWrite -> Backup Operators chain ready" -ForegroundColor Green
+Write-Host "  [OK] Backup Operators membership ready (creds disclosed via GPP - configure-ch3-gpp.ps1)" -ForegroundColor Green
 
 # ============================================================================
 # CHAIN 4: ForceChangePassword -> Self/AddMember -> WriteDACL -> Enterprise Admin
@@ -169,18 +176,11 @@ Write-Host "  [OK] GenericAll -> GenericWrite -> Backup Operators chain ready" -
 # -> Project-Phoenix WriteDACL on Enterprise Admins
 # ============================================================================
 Write-Host ""
-Write-Host "[Chain 4] ForceChangePassword chain (m.wilson -> k.lee -> Project-Phoenix -> EA)" -ForegroundColor Green
-
-$kleeDN = (Get-ADUser "k.lee").DistinguishedName
-Set-ADObjectACE -TargetDN $kleeDN -PrincipalSAM "m.wilson" -RightType "ForceChangePassword"
-
-$projPhoenixDN = (Get-ADGroup "Project-Phoenix").DistinguishedName
-Set-ADObjectACE -TargetDN $projPhoenixDN -PrincipalSAM "k.lee" -RightType "Self-Membership"
-
-$eaGroupDN = (Get-ADGroup "Enterprise Admins").DistinguishedName
-Set-ADObjectACE -TargetDN $eaGroupDN -PrincipalSAM "Project-Phoenix" -RightType "WriteDacl"
-
-Write-Host "  [OK] ForceChangePassword -> Self-Membership -> WriteDACL chain ready" -ForegroundColor Green
+Write-Host "[Chain 4] GPO abuse -> SYSTEM on DC (Project-Phoenix edits a DC-linked GPO)" -ForegroundColor Green
+Write-Host "  [INFO] GPO creation, DC-OU link, and edit delegation to Project-Phoenix are" -ForegroundColor Gray
+Write-Host "         handled by configure-ch4-gpo.ps1. Entry is the Ch8 anon foothold:" -ForegroundColor Gray
+Write-Host "         anon -> y.chen (Project-Phoenix) -> GPO edit -> SYSTEM on DC -> DA." -ForegroundColor Gray
+Write-Host "  [OK] Chain 4 handled in configure-ch4-gpo.ps1" -ForegroundColor Green
 
 # ============================================================================
 # CHAIN 5: WriteOwner -> ReadGMSAPassword -> GenericAll on DC -> DCSync
@@ -282,9 +282,9 @@ Write-Host " Attack Path Configuration Complete" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host " Chain 1: Kerberoasting       svc_sqldb (DA + weak SPN password)" -ForegroundColor White
-Write-Host " Chain 2: AS-REP Roast        j.martinez -> r.chen -> Server-Admins -> DA" -ForegroundColor White
-Write-Host " Chain 3: GenericAll          a.johnson -> Helpdesk-Operators -> svc_backup" -ForegroundColor White
-Write-Host " Chain 4: ForceChangePassword m.wilson -> k.lee -> Project-Phoenix -> EA" -ForegroundColor White
+Write-Host " Chain 2: AS-REP + ShadowCreds j.martinez -> GenericWrite r.chen -> Account Operators" -ForegroundColor White
+Write-Host " Chain 3: GPP cpassword        svc_backup (SYSVOL) -> Backup Operators -> NTDS" -ForegroundColor White
+Write-Host " Chain 4: GPO abuse            Project-Phoenix -> DC-linked GPO -> SYSTEM on DC" -ForegroundColor White
 Write-Host " Chain 5: GMSA/DCSync         d.patel -> GMSA-Readers -> gmsa_svc$ -> DC" -ForegroundColor White
 Write-Host " Chain 6: Delegation          SVR1 (Unconstrained) | svc_web (Constrained) | ADCS (RBCD)" -ForegroundColor White
 Write-Host "          (configured in configure-machine-attacks.ps1 after all VMs join)" -ForegroundColor Gray

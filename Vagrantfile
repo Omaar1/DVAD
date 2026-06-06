@@ -73,12 +73,21 @@ Vagrant.configure("2") do |cfg_vm|
       # later by configure-machine-attacks.ps1 once SVR1 has joined.
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/install-laps-schema.ps1"
 
+      # Anonymous LDAP bind + Account Operators SDProp-exclusion (dSHeuristics) and the
+      # ANONYMOUS LOGON read grant must run BEFORE attack-path ACEs are written, so the
+      # Ch2 GenericWrite ACE on r.chen (an Account Operators member) survives SDProp.
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/tools/anonBind.ps1"
+
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/configure-attack-paths.ps1"
 
-      # Anonymous access attack surface: LDAP anonymous bind (dSHeuristics) and SMB
-      # null-session enumeration. Applied before the final reboot so the LSA/SMB
+      # Chain 3 (GPP cpassword in SYSVOL) and Chain 4 (GPO abuse: Project-Phoenix gets
+      # edit on a DC-linked GPO). Both create GPOs / write SYSVOL, so they run after the
+      # AD objects and ACEs exist.
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/configure-ch3-gpp.ps1"
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/configure-ch4-gpo.ps1"
+
+      # SMB null-session enumeration. Applied before the final reboot so the LSA/SMB
       # registry changes take effect.
-      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/tools/anonBind.ps1"
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/tools/null-session.ps1"
 
       # Final reboot to settle configuration
@@ -360,13 +369,12 @@ Vagrant.configure("2") do |cfg_vm|
 
       # Configure regional settings
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/provision-base.ps1"
-      config.vm.provision "shell", reboot: true
 
       # Disable License service
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/windows/disable-license-service.ps1"
-      config.vm.provision "shell", reboot: true
 
-      # Join the domain
+      # Join the domain (provision-base + disable-license need no reboot first; one
+      # reboot here applies the SID/regional/license changes together, like ADCS)
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/join-domain.ps1"
       config.vm.provision "shell", reboot: true
 

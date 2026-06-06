@@ -72,7 +72,7 @@
       "path": "OU=IT,OU=Employees,",
       "title": "Senior Systems Administrator", "department": "IT",
       "password": "Password1",
-      "groups": ["IT-Team", "Server-Admins"]
+      "groups": ["IT-Team", "Server-Admins", "Account Operators"]
     },
     {
       "type": "user", "username": "l.garcia",
@@ -326,6 +326,7 @@
       "path": "OU=Engineering,OU=Employees,",
       "title": "Senior Software Developer", "department": "Engineering",
       "password": "S3n!0rDev#2025Yx",
+      "description": "Onboarding note - temp password set by IT: S3n!0rDev#2025Yx (user to change at first logon).",
       "groups": ["Engineering-Team", "Project-Phoenix"]
     },
     {

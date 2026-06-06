@@ -91,6 +91,10 @@ foreach ($file in $files) {
                 $optional['Title'] = $object.title
             }            
 
+            if ($object | Get-Member description) {
+                $optional['Description'] = $object.description
+            }
+
             if ($object | Get-Member spn) {
                 # SPNs in lab-users.json are already fully qualified; register as-is.
                 $optional['ServicePrincipalNames'] = @($object.spn)
