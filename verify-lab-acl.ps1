@@ -38,7 +38,7 @@ function In-Group($member,$group){
     try { [bool](Get-ADGroupMember $group -Recursive -EA Stop | Where-Object { $_.SamAccountName -eq $member }) } catch { $false }
 }
 function User-Pw($name){
-    ((Get-Content -Raw $usersJson | ConvertFrom-Json).objects | Where-Object { $_.username -eq $name }).password
+    ((Get-Content -Raw $usersJson | ConvertFrom-Json).objects | Where-Object { $_.type -eq 'user' -and $_.username -eq $name }).password
 }
 
 $G_REPL = '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2'

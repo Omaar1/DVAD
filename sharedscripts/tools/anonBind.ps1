@@ -43,7 +43,10 @@ Write-Host "dSHeuristics set to 0000002001000001 (anon bind + Account Operators 
 # clients can enumerate objects and read attributes like 'description'.
 `$root    = [ADSI]"LDAP://$domainDN"
 `$anonSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-7")
-`$readAce = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(`$anonSid, "GenericRead", "Allow", "All")
+`$rights  = [System.DirectoryServices.ActiveDirectoryRights]::GenericRead
+`$allow   = [System.Security.AccessControl.AccessControlType]::Allow
+`$inherit = [System.DirectoryServices.ActiveDirectorySecurityInheritance]::All
+`$readAce = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(`$anonSid, `$rights, `$allow, `$inherit)
 Add-AdAceIfMissing -DirectoryEntry `$root -Ace `$readAce | Out-Null
 Write-Host "ANONYMOUS LOGON granted GenericRead on $domainDN (Ch8)."
 "@

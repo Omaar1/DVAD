@@ -23,7 +23,7 @@ Start-PhaseTimer -PhaseName "CHAIN 3 - GPP cpassword plant (svc_backup)"
 # svc_backup's real password (single source: lab-users.json) so the planted cpassword
 # decrypts to a working credential.
 $users = Get-Content -Raw "C:\vagrant\provision\variables\lab-users.json" | ConvertFrom-Json
-$svcPw = ($users.objects | Where-Object { $_.username -eq "svc_backup" }).password
+$svcPw = ($users.objects | Where-Object { $_.type -eq "user" -and $_.username -eq "svc_backup" }).password
 if (-not $svcPw) { throw "svc_backup not found in lab-users.json" }
 
 # Encrypt to a GPP cpassword: AES-256-CBC with Microsoft's published key (MS14-025),
