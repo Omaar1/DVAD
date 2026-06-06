@@ -142,9 +142,9 @@ Vagrant.configure("2") do |cfg_vm|
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/join-domain.ps1"
       config.vm.provision "shell", reboot: true
 
-      # Install ActiveDirectory Certificate Services (ESC1-ESC8 vulnerable templates)
+      # Install ActiveDirectory Certificate Services (ESC1-ESC8 vulnerable templates).
+      # No reboot here - the MemberDns step needs none, so one reboot covers both.
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/ADCS/install-adcs.ps1"
-      config.vm.provision "shell", reboot: true
 
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/networking/configure-network.ps1 MemberDns"
       config.vm.provision "shell", reboot: true
@@ -251,15 +251,16 @@ Vagrant.configure("2") do |cfg_vm|
       # - Enables PXE without password protection
       # - Creates boot images and task sequence for OS deployment
       # - Deploys task sequence to All Systems collection
+      # The four Vuln-* scripts below are pure SCCM-console operations (boundaries, TS,
+      # client push, package). They need no reboot between them; the site stays up and
+      # each reconnects to the provider on its own.
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/SCCM/Vuln-NAA-PXE.ps1"
-      config.vm.provision "shell", reboot: true
 
       # ========================================================================
       # PHASE 7: VULNERABLE CONFIGURATION (CRED-2 ATTACK PATH)
       # ========================================================================
       # - Deploys task sequence to All Systems collection
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/SCCM/Vuln-TS-Variables.ps1"
-      config.vm.provision "shell", reboot: true
 
       # ========================================================================
       # PHASE 8: VULNERABLE CLIENT PUSH Installation
@@ -270,7 +271,6 @@ Vagrant.configure("2") do |cfg_vm|
       # - Configures client push for all systems
       # - Adds SILENT\sccm_cpia to client push account
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/services/SCCM/Vuln-ClientPush.ps1"
-      config.vm.provision "shell", reboot: true
 
       # ========================================================================
       # PHASE 9: VULNERABLE DISTRIBUTION POINT (Anon DP LOOTING)

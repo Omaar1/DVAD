@@ -80,6 +80,26 @@ if ($iniMismatch.Count -gt 0) {
 }
 Write-Host " [OK] ConfigMgrAutoSave.ini matches lab-config.json (site $SiteCode, server $SccmFqdn)." -ForegroundColor Green
 
+# --- FAST IDEMPOTENCY: skip the ~40-min site install if MECM is already installed ---
+# A completed Primary Site setup leaves ALL THREE of: the SMS Setup registry key, the
+# SMS_EXECUTIVE service, and a queryable SMS provider namespace (root\SMS\site_<code>).
+# Requiring all three avoids re-running setup.exe on a re-provision, yet still reinstalls
+# if a prior run died partway (any one missing -> fall through and install normally).
+$mecmInstalled = $false
+try {
+    $smsReg  = Test-Path "HKLM:\SOFTWARE\Microsoft\SMS\Setup"
+    $smsSvc  = [bool](Get-Service -Name "SMS_EXECUTIVE" -ErrorAction SilentlyContinue)
+    $smsSite = $null
+    try { $smsSite = Get-WmiObject -Namespace "root\SMS\site_$SiteCode" -Class SMS_Site -ErrorAction Stop } catch { }
+    $mecmInstalled = ($smsReg -and $smsSvc -and $smsSite)
+} catch { $mecmInstalled = $false }
+
+if ($mecmInstalled) {
+    Write-Host " [SKIP] MECM site '$SiteCode' already installed (SMS registry + SMS_EXECUTIVE + SMS provider all present)." -ForegroundColor Green
+    Write-Host " [SKIP] Skipping the ~40-min site install. Destroy/rebuild the VM to force a clean reinstall." -ForegroundColor Green
+    exit 0
+}
+
 # --- STEP 0: FIX NETWORK & DNS ---
 Start-PhaseTimer -PhaseName "VERIFYING CONNECTIVITY"
 try {
