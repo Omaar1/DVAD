@@ -80,6 +80,11 @@ Vagrant.configure("2") do |cfg_vm|
 
       config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/configure-attack-paths.ps1"
 
+      # Pre-stage SVR1$/ADCS$ computer accounts and apply Chain 6/7 (delegation, RBCD,
+      # LAPS) up front. The real machines join later and reuse these accounts; the ACEs
+      # and attributes survive the join (server1 only re-asserts SVR1's delegation flag).
+      config.vm.provision "shell", path: "sharedscripts/ps.ps1", args: "sharedscripts/ad/prestage-machine-attacks.ps1"
+
       # Chain 3 (GPP cpassword in SYSVOL) and Chain 4 (GPO abuse: Project-Phoenix gets
       # edit on a DC-linked GPO). Both create GPOs / write SYSVOL, so they run after the
       # AD objects and ACEs exist.
