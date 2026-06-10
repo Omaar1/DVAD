@@ -1,4 +1,4 @@
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+. C:\vagrant\sharedscripts\get-lab-config.ps1
 $cfg      = Get-LabConfig
 $domain   = $cfg.childDomain
 $parent   = $cfg.domain

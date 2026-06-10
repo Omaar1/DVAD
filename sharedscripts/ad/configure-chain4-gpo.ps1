@@ -1,4 +1,4 @@
-# configure-ch4-gpo.ps1
+# configure-chain4-gpo.ps1
 # Chain 4: GPO abuse -> SYSTEM on the DC. Creates a GPO linked to the Domain
 # Controllers OU and delegates EDIT rights on it to Project-Phoenix (the misconfig).
 # A Project-Phoenix member can then inject an immediate scheduled task / startup
@@ -7,9 +7,9 @@
 
 $ErrorActionPreference = "Stop"
 
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
-. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+. C:\vagrant\sharedscripts\get-lab-config.ps1
+. C:\vagrant\sharedscripts\invoke-as-user-task.ps1
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 
 $cfg     = Get-LabConfig
 $netbios = $cfg.domain.netbiosName

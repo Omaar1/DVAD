@@ -6,7 +6,7 @@
 $ErrorActionPreference = "Stop"
 
 # Import Phase Timer Module
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 
 # --- CONFIGURATION ---
 $LocalSource = "C:\vagrant\sharedscripts\services\SCCM\SQL-offline"

@@ -1,4 +1,4 @@
-# Invoke-AsUserTask.ps1
+# invoke-as-user-task.ps1
 # ------------------------------------------------------------------------------
 # Shared helper: run a script under a REAL logon token via a one-shot scheduled
 # task, then clean up. Dot-source this file, then call Invoke-AsUserTask.
@@ -56,7 +56,7 @@ catch { `$_.Exception.Message | Out-File "$log" -Append; "FAILED" | Out-File "$s
     $tr = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$wrapper`""
     # Schedule for tomorrow so /st is never in the past. Otherwise schtasks prints
     # "WARNING: Task may not run because /ST is earlier than current time" to stderr,
-    # which trips the ps.ps1 Stop/trap. We run the task immediately via /run anyway,
+    # which trips the invoke-vagrant-script.ps1 Stop/trap. We run the task immediately via /run anyway,
     # so the scheduled time is irrelevant.
     $startDate = (Get-Date).AddDays(1).ToString('MM/dd/yyyy')
     if ([string]::IsNullOrWhiteSpace($User) -or $User -eq 'SYSTEM') {

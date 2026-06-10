@@ -1,11 +1,11 @@
 $ErrorActionPreference = "Stop"
 
 # Import Phase Timer Module
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 
 # --- 1. READ VARIABLES ---
 Start-PhaseTimer -PhaseName "LOADING CONFIGURATION"
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+. C:\vagrant\sharedscripts\get-lab-config.ps1
 $cfg          = Get-LabConfig
 $domainConfig = $cfg.domain
 $SccmAccounts = $cfg.sccm.accounts
@@ -19,7 +19,7 @@ $domainAdminCredentials = New-Object System.Management.Automation.PSCredential($
 
 $DomainName = $domainConfig.fqdn
 $DomainDN = $domainConfig.dn
-$SchemaMaster = "$($domainConfig.dcName).$($domainConfig.fqdn)"  # e.g. ROOTDC.silent.run
+$SchemaMaster = "$($domainConfig.dcName).$($domainConfig.fqdn)"  # e.g. DVAD-DC.dvad.lab
 
 Write-Host "Configuration Loaded:" -ForegroundColor Cyan
 Write-Host " - Domain: $DomainName"

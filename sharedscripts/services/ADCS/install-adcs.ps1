@@ -3,7 +3,7 @@
 # CN=Public Key Services,CN=Services,CN=Configuration,... and needs Enterprise
 # Admins. Without -Credential, the cmdlet fails at set_CAType with
 # 0x80072082 ERROR_DS_RANGE_CONSTRAINT (the DC rejects the operation).
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+. C:\vagrant\sharedscripts\get-lab-config.ps1
 $forest = (Get-LabConfig).domain
 $securePassword = ConvertTo-SecureString $forest.administratorPassword -AsPlainText -Force
 $username = $forest.netbiosName + "\Administrator"
@@ -11,8 +11,8 @@ $domainAdminCredentials = New-Object System.Management.Automation.PSCredential($
 
 # Helper to run blocks under a real domain-admin logon token (scheduled task).
 # Needed for AD writes that the local WinRM identity cannot perform.
-. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+. C:\vagrant\sharedscripts\invoke-as-user-task.ps1
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 
 Start-PhaseTimer -PhaseName "INSTALL ADCS (CA, ESC1-8 templates)"
 

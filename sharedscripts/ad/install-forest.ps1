@@ -6,10 +6,10 @@
 $ErrorActionPreference = "Stop"
 
 # Import Phase Timer Module
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 
 #This script promotes the Windows Server to a domain controller and will start the installation of a forest.
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+. C:\vagrant\sharedscripts\get-lab-config.ps1
 $cfg    = Get-LabConfig
 $forest = $cfg.domain
 $child  = $cfg.childDomain

@@ -7,7 +7,7 @@
 # ==============================================================================
 
 # --- CONFIGURATION ---
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+. C:\vagrant\sharedscripts\get-lab-config.ps1
 $cfg = Get-LabConfig
 $netbios = $cfg.domain.netbiosName
 $SiteCode = $cfg.sccm.siteCode
@@ -36,10 +36,10 @@ $CollVarValue = "AKIA-SERVER-MIGRATION-KEY-999"
 # ==============================================================================
 # INITIALIZATION: LOAD MODULE & CONNECT TO SITE
 # ==============================================================================
-. C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+. C:\vagrant\sharedscripts\services\SCCM\connect-cm-site.ps1
 Connect-CMSite -SiteCode $SiteCode -SiteServer $SiteServer
 
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 Start-PhaseTimer -PhaseName "VULN TASK SEQUENCE VARIABLES (CRED-2)"
 
 # ==============================================================================

@@ -1,4 +1,4 @@
-# configure-ch3-gpp.ps1
+# configure-chain3-gpp.ps1
 # Chain 3 entry: plant a Group Policy Preferences (GPP) cpassword for svc_backup in
 # SYSVOL (the MS14-025 issue). Any authenticated user can read SYSVOL, find the
 # cpassword in Services.xml, and decrypt it with Microsoft's published AES key
@@ -10,9 +10,9 @@
 
 $ErrorActionPreference = "Stop"
 
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
-. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+. C:\vagrant\sharedscripts\get-lab-config.ps1
+. C:\vagrant\sharedscripts\invoke-as-user-task.ps1
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 
 $cfg     = Get-LabConfig
 $netbios = $cfg.domain.netbiosName

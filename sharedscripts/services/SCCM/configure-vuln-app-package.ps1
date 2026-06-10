@@ -6,7 +6,7 @@
 # ==============================================================================
 
 # --- CONFIGURATION ---
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+. C:\vagrant\sharedscripts\get-lab-config.ps1
 $cfg = Get-LabConfig
 $SiteCode = $cfg.sccm.siteCode                          # Site Code (from lab-config.json)
 $SiteServer = "$($cfg.hosts.sccm.name).$($cfg.domain.fqdn)"  # Site Server FQDN
@@ -19,10 +19,10 @@ $HardcodedPass = "B@ckup`$2024!Secure"       # The secret we will steal
 # ---------------------
 
 # 1. INITIALIZE SCCM MODULE
-. C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+. C:\vagrant\sharedscripts\services\SCCM\connect-cm-site.ps1
 Connect-CMSite -SiteCode $SiteCode -SiteServer $SiteServer
 
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 Start-PhaseTimer -PhaseName "VULN DP PACKAGE (CRED-4 looting)"
 
 # 2. CREATE VULNERABLE SOURCE FILE
@@ -31,7 +31,7 @@ if (-not (Test-Path $SourceDir)) { New-Item -Path $SourceDir -ItemType Directory
 
 $ScriptContent = @"
 # INFRA TICKET-992: Create Backup User
-# AUTHOR: admin@silent.run
+# AUTHOR: admin@dvad.lab
 `$User = "svc_backup_agent"
 `$Password = ConvertTo-SecureString "$HardcodedPass" -AsPlainText -Force
 New-LocalUser -Name `$User -Password `$Password -Description "Backup Service Account" -ErrorAction SilentlyContinue

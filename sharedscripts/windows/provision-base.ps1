@@ -6,7 +6,7 @@ if (!$zone) {
     $zone = "en-US"
 }
 
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 Start-PhaseTimer -PhaseName "BASE OS CONFIGURATION"
 
 #This script is used to setup the base image. We essentially perform the following:

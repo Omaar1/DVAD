@@ -1,11 +1,11 @@
 # ==============================================================================
-# Script: fixSccmPermissions.ps1
+# Script: repair-sccm-permissions.ps1
 # Purpose: Post-install RBAC bootstrap - grant the human admin accounts
-#          (SILENT\Administrator, SILENT\SCCMAdmin) Full Administrator in SCCM.
+#          (DVAD\Administrator, DVAD\SCCMAdmin) Full Administrator in SCCM.
 #
 # WHY THIS EXISTS (by design, not a workaround):
 #   SCCM makes the account that runs setup.exe the SOLE initial Full Administrator.
-#   Here, Vagrant runs the shell provisioners (including installMECM.ps1 ->
+#   Here, Vagrant runs the shell provisioners (including install-mecm.ps1 ->
 #   setup.exe) as NT AUTHORITY\SYSTEM, so SYSTEM is the only account with console
 #   access right after install. No domain user can manage SCCM until an existing
 #   admin grants them RBAC. This script is that grant step.
@@ -16,7 +16,7 @@
 #   not escalating arbitrarily.
 #
 #   (Alternative considered and rejected for now: install SCCM as
-#   SILENT\Administrator so it is Full Admin from the start. That removes this
+#   DVAD\Administrator so it is Full Admin from the start. That removes this
 #   step but means wrapping the long, log-streamed setup in a run-as task -
 #   higher risk on the most fragile part of the lab. See git history / notes.)
 # ==============================================================================
@@ -24,9 +24,9 @@
 $ErrorActionPreference = "Stop"
 
 # Import Phase Timer Module
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
-. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
+. C:\vagrant\sharedscripts\invoke-as-user-task.ps1
+. C:\vagrant\sharedscripts\get-lab-config.ps1
 
 # --- CONFIGURATION ---
 $cfg = Get-LabConfig
@@ -122,7 +122,7 @@ try {
         $env:SMS_ADMIN_UI_PATH = $AdminConsoleBin
     }
 
-    . C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+    . C:\vagrant\sharedscripts\services\SCCM\connect-cm-site.ps1
     Connect-CMSite -SiteCode $SiteCode -SiteServer $ProviderFQDN
     Stop-PhaseTimer -Status Success
 }

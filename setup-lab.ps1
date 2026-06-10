@@ -23,13 +23,13 @@ if (-not $isAdmin) {
 }
 
 # Single source of truth for hostnames, IPs, box, and resources.
-. "$PSScriptRoot\sharedscripts\Get-LabConfig.ps1"
+. "$PSScriptRoot\sharedscripts\get-lab-config.ps1"
 $cfg = Get-LabConfig
 
 Write-Host ""
 Write-Host "  ============================================" -ForegroundColor Magenta
-Write-Host "   ITI-cyLab - AD Pentest Lab Setup" -ForegroundColor Magenta
-Write-Host "   4 VMs: RootDC + ADCS + SCCM + SVR1 ($($cfg.domain.fqdn))" -ForegroundColor Magenta
+Write-Host "   DVAD - Damn Vulnerable Active Directory" -ForegroundColor Magenta
+Write-Host "   4 VMs: $($cfg.hosts.rootdc.name) + $($cfg.hosts.adcs.name) + $($cfg.hosts.sccm.name) + $($cfg.hosts.svr1.name) ($($cfg.domain.fqdn))" -ForegroundColor Magenta
 Write-Host "  ============================================" -ForegroundColor Magenta
 Write-Host ""
 
@@ -316,10 +316,10 @@ Write-Host "  Lab Path:   $labPath" -ForegroundColor White
 Write-Host "  Storage:    $storageDrive (boxes + VMs)" -ForegroundColor White
 Write-Host "  Box:        $($cfg.box.name) v$boxVersion" -ForegroundColor White
 Write-Host "  Domain:     $($cfg.domain.fqdn)" -ForegroundColor White
-Write-Host "  RootDC:     $($cfg.hosts.rootdc.ip) ($([math]::Round($cfg.hosts.rootdc.memory/1024)) GB RAM)" -ForegroundColor White
-Write-Host "  ADCS:       $($cfg.hosts.adcs.ip) ($([math]::Round($cfg.hosts.adcs.memory/1024)) GB RAM)" -ForegroundColor White
-Write-Host "  SCCM:       $($cfg.hosts.sccm.ip) ($([math]::Round($cfg.hosts.sccm.memory/1024)) GB RAM)" -ForegroundColor White
-Write-Host "  SVR1:       $($cfg.hosts.svr1.ip) ($([math]::Round($cfg.hosts.svr1.memory/1024)) GB RAM)" -ForegroundColor White
+Write-Host "  $($cfg.hosts.rootdc.name):    $($cfg.hosts.rootdc.ip) ($([math]::Round($cfg.hosts.rootdc.memory/1024)) GB RAM)" -ForegroundColor White
+Write-Host "  $($cfg.hosts.adcs.name):       $($cfg.hosts.adcs.ip) ($([math]::Round($cfg.hosts.adcs.memory/1024)) GB RAM)" -ForegroundColor White
+Write-Host "  $($cfg.hosts.sccm.name):       $($cfg.hosts.sccm.ip) ($([math]::Round($cfg.hosts.sccm.memory/1024)) GB RAM)" -ForegroundColor White
+Write-Host "  $($cfg.hosts.svr1.name):      $($cfg.hosts.svr1.ip) ($([math]::Round($cfg.hosts.svr1.memory/1024)) GB RAM)" -ForegroundColor White
 Write-Host "  Total RAM:  ~$([math]::Round(($cfg.hosts.rootdc.memory + $cfg.hosts.adcs.memory + $cfg.hosts.sccm.memory + $cfg.hosts.svr1.memory)/1024)) GB for VMs" -ForegroundColor White
 Write-Host ""
 
@@ -337,35 +337,40 @@ if ($choice -ne "y" -and $choice -ne "Y") {
 
 Write-Host ""
 Write-Status "Building the lab..."
-Write-Status "This will create 3 Windows VMs, install Active Directory, ADCS, and configure everything."
+Write-Status "This will create 4 Windows VMs, install Active Directory, ADCS, and configure everything."
 Write-Status "Do NOT close this window."
 Write-Host ""
 
 Set-Location $labPath
 $log = "$labPath\setup.log"
 
-Write-Status "Step 1/3 - Starting RootDC (domain controller)..."
-& vagrant up RootDC 2>&1 | Tee-Object -FilePath $log
+$rootName = $cfg.hosts.rootdc.name
+$adcsName = $cfg.hosts.adcs.name
+$sccmName = $cfg.hosts.sccm.name
+$svr1Name = $cfg.hosts.svr1.name
+
+Write-Status "Step 1/3 - Starting $rootName (domain controller)..."
+& vagrant up $rootName 2>&1 | Tee-Object -FilePath $log
 if ($LASTEXITCODE -ne 0) {
-    Write-Fail "RootDC failed. Check log: $log"
+    Write-Fail "$rootName failed. Check log: $log"
     exit 1
 }
-Write-Ok "RootDC up. Waiting 90s for AD services to settle..."
+Write-Ok "$rootName up. Waiting 90s for AD services to settle..."
 Start-Sleep -Seconds 90
 
-Write-Status "Step 2/3 - Starting ADCS_server and SCCM_server..."
-& vagrant up ADCS_server SCCM_server 2>&1 | Tee-Object -FilePath $log -Append
+Write-Status "Step 2/3 - Starting $adcsName and $sccmName..."
+& vagrant up $adcsName $sccmName 2>&1 | Tee-Object -FilePath $log -Append
 if ($LASTEXITCODE -ne 0) {
-    Write-Fail "ADCS_server or SCCM_server failed. Check log: $log"
+    Write-Fail "$adcsName or $sccmName failed. Check log: $log"
     exit 1
 }
-Write-Ok "ADCS and SCCM up. Waiting 60s..."
+Write-Ok "$adcsName and $sccmName up. Waiting 60s..."
 Start-Sleep -Seconds 60
 
-Write-Status "Step 3/3 - Starting server1..."
-& vagrant up server1 2>&1 | Tee-Object -FilePath $log -Append
+Write-Status "Step 3/3 - Starting $svr1Name..."
+& vagrant up $svr1Name 2>&1 | Tee-Object -FilePath $log -Append
 if ($LASTEXITCODE -ne 0) {
-    Write-Fail "server1 failed. Check log: $log"
+    Write-Fail "$svr1Name failed. Check log: $log"
     exit 1
 }
 
@@ -375,10 +380,10 @@ Write-Host "   Lab Built Successfully!" -ForegroundColor Green
 Write-Host "  ============================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Domain:     $($cfg.domain.fqdn)" -ForegroundColor White
-Write-Host "  RootDC:     $($cfg.hosts.rootdc.ip)" -ForegroundColor White
-Write-Host "  ADCS:       $($cfg.hosts.adcs.ip)" -ForegroundColor White
-Write-Host "  SCCM:       $($cfg.hosts.sccm.ip)" -ForegroundColor White
-Write-Host "  SVR1:       $($cfg.hosts.svr1.ip)" -ForegroundColor White
+Write-Host "  $($cfg.hosts.rootdc.name):    $($cfg.hosts.rootdc.ip)" -ForegroundColor White
+Write-Host "  $($cfg.hosts.adcs.name):       $($cfg.hosts.adcs.ip)" -ForegroundColor White
+Write-Host "  $($cfg.hosts.sccm.name):       $($cfg.hosts.sccm.ip)" -ForegroundColor White
+Write-Host "  $($cfg.hosts.svr1.name):      $($cfg.hosts.svr1.ip)" -ForegroundColor White
 Write-Host "  Log:        $log" -ForegroundColor White
 Write-Host ""
 Write-Host "  Run .\verify-lab.ps1 to check health" -ForegroundColor Cyan

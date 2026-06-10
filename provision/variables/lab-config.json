@@ -4,33 +4,34 @@
     "version": "2018.10.03"
   },
   "domain": {
-    "name": "silent.run",
-    "fqdn": "silent.run",
-    "netbiosName": "SILENT",
-    "dn": "DC=silent,DC=run",
+    "name": "dvad.lab",
+    "fqdn": "dvad.lab",
+    "netbiosName": "DVAD",
+    "dn": "DC=dvad,DC=lab",
     "administratorPassword": "P@ssw0rd",
     "safeModeAdministratorPassword": "P@ssw0rd",
-    "dcName": "ROOTDC"
+    "dcName": "DVAD-DC"
   },
   "childDomain": {
-    "name": "something",
-    "fqdn": "something.silent.run",
-    "netbiosName": "SOMETHING",
-    "dn": "DC=something,DC=silent,DC=run",
+    "name": "hq.dvad.lab",
+    "fqdn": "hq.dvad.lab",
+    "netbiosName": "HQ",
+    "dn": "DC=hq,DC=dvad,DC=lab",
     "administratorPassword": "P@ssw0rd",
     "safeModeAdministratorPassword": "P@ssw0rd",
-    "dcName": "CHILDDC"
+    "dcName": "HQ-DC"
   },
   "network": {
     "subnet": "10.10.10.0",
     "prefix": "10.10.10."
   },
   "hosts": {
-    "rootdc": { "name": "ROOTDC", "ip": "10.10.10.100", "cpus": 2, "memory": 2048 },
-    "childdc": { "name": "CHILDDC", "ip": "10.10.10.101", "cpus": 2, "memory": 4096 },
-    "adcs": { "name": "ADCS", "ip": "10.10.10.103", "cpus": 2, "memory": 2048 },
-    "sccm": { "name": "SCCM", "ip": "10.10.10.104", "cpus": 2, "memory": 8192 },
-    "svr1": { "name": "SVR1", "ip": "10.10.10.150", "cpus": 2, "memory": 2048 }
+    "rootdc": { "name": "DVAD-DC", "ip": "10.10.10.100", "cpus": 2, "memory": 2048 },
+    "childdc": { "name": "HQ-DC", "ip": "10.10.10.101", "cpus": 2, "memory": 4096 },
+    "adcs": { "name": "CA01", "ip": "10.10.10.103", "cpus": 2, "memory": 2048 },
+    "sccm": { "name": "CM01", "ip": "10.10.10.104", "cpus": 2, "memory": 8192 },
+    "svr1": { "name": "SRV01", "ip": "10.10.10.150", "cpus": 2, "memory": 2048 },
+    "mssql": { "name": "SQL01", "ip": "10.10.10.105", "cpus": 2, "memory": 4096 }
   },
   "sccm": {
     "siteCode": "PS1",

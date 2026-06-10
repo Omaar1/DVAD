@@ -1,15 +1,15 @@
-# Connect-CMSite.ps1
+# connect-cm-site.ps1
 # ------------------------------------------------------------------------------
 # Shared helper: locate the ConfigurationManager PowerShell module, import it,
 # and connect to the SCCM site (CMSite PSDrive). Dot-source this file, then call
 # Connect-CMSite. Replaces the ~30-line locate/import/connect block that was
 # copy-pasted across the SCCM provisioning scripts.
 #
-#   . C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+#   . C:\vagrant\sharedscripts\services\SCCM\connect-cm-site.ps1
 #   Connect-CMSite -SiteCode $SiteCode -SiteServer $SiteServer
 #
 # SiteCode/SiteServer default to lab-config.json (sccm.siteCode and the derived
-# SCCM FQDN) when omitted. Throws on failure so the ps.ps1 trap / caller catch
+# SCCM FQDN) when omitted. Throws on failure so the invoke-vagrant-script.ps1 trap / caller catch
 # surfaces it. Idempotent: skips import/drive creation if already present.
 # ------------------------------------------------------------------------------
 
@@ -20,7 +20,7 @@ function Connect-CMSite {
     )
 
     if (-not $SiteCode -or -not $SiteServer) {
-        . C:\vagrant\sharedscripts\Get-LabConfig.ps1
+        . C:\vagrant\sharedscripts\get-lab-config.ps1
         $cfg = Get-LabConfig
         if (-not $SiteCode)   { $SiteCode   = $cfg.sccm.siteCode }
         if (-not $SiteServer) { $SiteServer = "$($cfg.hosts.sccm.name).$($cfg.domain.fqdn)" }

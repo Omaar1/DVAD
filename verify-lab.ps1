@@ -1,15 +1,15 @@
 # verify-lab.ps1
-# Post-provisioning health check for SilentRUN-Lab.
+# Post-provisioning health check for DVAD.
 # Tests IP reachability, WinRM connectivity, and key service status.
 
-. "$PSScriptRoot\sharedscripts\Get-LabConfig.ps1"
+. "$PSScriptRoot\sharedscripts\get-lab-config.ps1"
 $cfg = Get-LabConfig
 
 $vms = @(
-    @{ Name = "RootDC";      IP = $cfg.hosts.rootdc.ip; Services = @("ADWS", "DNS", "Netlogon", "NTDS") },
-    @{ Name = "ADCS_server"; IP = $cfg.hosts.adcs.ip;   Services = @("CertSvc", "W3SVC") },
-    @{ Name = "SCCM_server"; IP = $cfg.hosts.sccm.ip;   Services = @("SMS_Executive", "MSSQLSERVER", "W3SVC") },
-    @{ Name = "SVR1";        IP = $cfg.hosts.svr1.ip;   Services = @("Workstation") }
+    @{ Name = $cfg.hosts.rootdc.name; IP = $cfg.hosts.rootdc.ip; Services = @("ADWS", "DNS", "Netlogon", "NTDS") },
+    @{ Name = $cfg.hosts.adcs.name;   IP = $cfg.hosts.adcs.ip;   Services = @("CertSvc", "W3SVC") },
+    @{ Name = $cfg.hosts.sccm.name;   IP = $cfg.hosts.sccm.ip;   Services = @("SMS_Executive", "MSSQLSERVER", "W3SVC") },
+    @{ Name = $cfg.hosts.svr1.name;   IP = $cfg.hosts.svr1.ip;   Services = @("Workstation") }
 )
 
 $pass   = ConvertTo-SecureString $cfg.domain.administratorPassword -AsPlainText -Force
@@ -18,7 +18,7 @@ $cred   = New-Object System.Management.Automation.PSCredential("$($cfg.domain.ne
 $allOk = $true
 
 Write-Host "======================================" -ForegroundColor Cyan
-Write-Host " SilentRUN-Lab Health Check" -ForegroundColor Cyan
+Write-Host " DVAD Health Check" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
 
 foreach ($vm in $vms) {

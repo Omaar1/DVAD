@@ -1,9 +1,9 @@
-# anonBind.ps1
+# enable-anonymous-bind.ps1
 # ------------------------------------------------------------------------------
 # Enables anonymous LDAP bind on the domain controller by setting the 7th
 # character of dSHeuristics to '2'. Unauthenticated clients can then bind and
 # enumerate the directory.
-#   Attack: ldapsearch -x -H ldap://10.10.10.100 -b "DC=silent,DC=run"
+#   Attack: ldapsearch -x -H ldap://10.10.10.100 -b "DC=dvad,DC=lab"
 #
 # dSHeuristics lives in the Configuration NC, which the plain WinRM provisioner
 # token cannot write ("Access is denied"). It is applied under a real domain-admin
@@ -12,9 +12,9 @@
 
 $ErrorActionPreference = "Stop"
 
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
-. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+. C:\vagrant\sharedscripts\get-lab-config.ps1
+. C:\vagrant\sharedscripts\invoke-as-user-task.ps1
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 
 $cfg     = Get-LabConfig
 $netbios = $cfg.domain.netbiosName
@@ -32,7 +32,7 @@ Start-PhaseTimer -PhaseName "ANONYMOUS LDAP BIND (dSHeuristics)"
 #                     Ch2 GenericWrite ACE on r.chen (an Account Operators member) is not
 #                     stripped hourly. char 10 = '1' is the required length marker.
 $anonScript = @"
-. C:\vagrant\sharedscripts\ad\Set-AdAce.ps1
+. C:\vagrant\sharedscripts\ad\set-ad-ace.ps1
 `$dircfg = [ADSI]"LDAP://CN=Directory Service,CN=Windows NT,CN=Services,CN=Configuration,$domainDN"
 `$dircfg.put("dSHeuristics", "0000002001000001")
 `$dircfg.SetInfo()

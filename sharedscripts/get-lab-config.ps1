@@ -1,11 +1,11 @@
-# Get-LabConfig.ps1
+# get-lab-config.ps1
 # ------------------------------------------------------------------------------
 # Single source of truth loader. Dot-source this file, then call Get-LabConfig
 # to get the parsed lab-config.json object:
 #
-#   . C:\vagrant\sharedscripts\Get-LabConfig.ps1
+#   . C:\vagrant\sharedscripts\get-lab-config.ps1
 #   $cfg = Get-LabConfig
-#   $cfg.domain.netbiosName     # "SILENT"
+#   $cfg.domain.netbiosName     # "DVAD"
 #   $cfg.hosts.sccm.ip          # "10.10.10.104"
 #
 # Resolves the config relative to this file (works both inside the VMs under

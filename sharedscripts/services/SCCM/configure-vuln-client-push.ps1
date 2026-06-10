@@ -1,5 +1,5 @@
 # --- CONFIGURATION VARIABLES ---
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+. C:\vagrant\sharedscripts\get-lab-config.ps1
 $cfg = Get-LabConfig
 $netbios = $cfg.domain.netbiosName
 $SiteCode = $cfg.sccm.siteCode
@@ -11,10 +11,10 @@ $Password = $cfg.sccm.accountPassword
 # ============================================================================== #
 # INITIALIZATION: LOAD MODULE & CONNECT TO SITE
 # ============================================================================== #
-. C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+. C:\vagrant\sharedscripts\services\SCCM\connect-cm-site.ps1
 Connect-CMSite -SiteCode $SiteCode -SiteServer $SiteServer
 
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 Start-PhaseTimer -PhaseName "VULN CLIENT PUSH (CRED-3)"
 
 # 1. Define the Credential (SCCM needs the password to store it locally)

@@ -23,7 +23,7 @@ param(
 # Run as ordered Vagrant provisioning steps (no scheduled tasks).
 # ==============================================================================
 
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+. C:\vagrant\sharedscripts\get-lab-config.ps1
 $cfg       = Get-LabConfig
 $LabSubnet = $cfg.network.prefix    # lab private subnet prefix
 $DcIp      = $cfg.hosts.rootdc.ip   # Root DC

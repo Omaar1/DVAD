@@ -8,7 +8,7 @@
 $ErrorActionPreference = "Stop"
 
 # Import Phase Timer Module (Ensure this file is clean!)
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 
 # Preserve ConfigMgrSetup.log to the host-visible share and print its tail so failures are diagnosable.
 function Save-SetupLog {
@@ -28,7 +28,7 @@ function Save-SetupLog {
 # NOTE: setup.exe reads the site code/name/server from ConfigMgrAutoSave.ini, which
 # duplicates values in lab-config.json. The preflight below asserts they match so a
 # drifted INI fails fast here instead of as a confusing ~40-min install failure.
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+. C:\vagrant\sharedscripts\get-lab-config.ps1
 $cfg = Get-LabConfig
 $SiteCode = $cfg.sccm.siteCode
 $SiteName = $cfg.sccm.siteName

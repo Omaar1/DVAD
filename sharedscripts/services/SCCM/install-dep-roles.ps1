@@ -1,5 +1,5 @@
 # ==============================================================================
-# Script: installDepRoles.ps1
+# Script: install-dep-roles.ps1
 # Purpose: Install IIS, .NET Framework 3.5, BITS, and SCCM prerequisites
 # ==============================================================================
 #
@@ -14,7 +14,7 @@
 # ==============================================================================
 
 # Import Phase Timer Module
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 
 # Start logging
 Start-Transcript -Path "C:\IIS_Install_Log.txt" -Append

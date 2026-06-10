@@ -45,7 +45,7 @@ References Tab:
 
 [x] Use this boundary group for site assignment. (MUST CHECK).
 
-Site System Servers: Ensure your server (SCCM.silent.run) is listed.
+Site System Servers: Ensure your server (CM01.dvad.lab) is listed.
 
 Phase 3: The Network Access Account (The Final Fix)
 Goal: Provide credentials for "Unknown Computers" to access the Distribution Point.
@@ -58,7 +58,7 @@ Network Access Account tab.
 
 Select Specify the account that accesses network locations.
 
-Add your account: SILENT\Administrator.
+Add your account: DVAD\Administrator.
 
 Click OK.
 

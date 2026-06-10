@@ -1,5 +1,5 @@
 # start-lab.ps1
-# Deploy and start SilentRUN-Lab. Works both locally and on a fresh remote server.
+# Deploy and start DVAD (Damn Vulnerable Active Directory). Works both locally and on a fresh remote server.
 # On a remote server, run this script directly - it will clone the repo if needed.
 #
 # Usage:
@@ -8,11 +8,11 @@
 
 $ErrorActionPreference = "Stop"
 
-$repoUrl   = "https://github.com/Omaar1/SilentRUN-Lab.git"
-$cloneDest = "C:\SilentRUN-Lab"
+$repoUrl   = "https://github.com/Omaar1/DVAD.git"
+$cloneDest = "C:\DVAD"
 
 Write-Host "======================================" -ForegroundColor Cyan
-Write-Host " SilentRUN-Lab" -ForegroundColor Cyan
+Write-Host " DVAD - Damn Vulnerable Active Directory" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
 
 
@@ -81,22 +81,22 @@ function Start-VM {
     Start-Sleep -Seconds $WaitSeconds
 }
 
-# RootDC first - everything else joins its domain
-Start-VM -Name "RootDC" -WaitSeconds 90
+# DVAD-DC first - everything else joins its domain
+Start-VM -Name "DVAD-DC" -WaitSeconds 90
 
-# ADCS and SCCM next - both join the domain independently
+# CA01 (ADCS) and CM01 (SCCM) next - both join the domain independently
 Write-Host ""
-Write-Host "[*] Starting ADCS_server and SCCM_server..." -ForegroundColor Yellow
-vagrant up ADCS_server SCCM_server
+Write-Host "[*] Starting CA01 and CM01..." -ForegroundColor Yellow
+vagrant up CA01 CM01
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] One or more member servers failed to start" -ForegroundColor Red
     exit 1
 }
-Write-Host "[+] ADCS and SCCM started." -ForegroundColor Green
+Write-Host "[+] CA01 and CM01 started." -ForegroundColor Green
 Start-Sleep -Seconds 60
 
-# SVR1 last - configure-machine-attacks.ps1 needs ADCS computer object in AD
-Start-VM -Name "server1" -WaitSeconds 30
+# SRV01 last - configure-machine-attacks.ps1 needs the CA01 computer object in AD
+Start-VM -Name "SRV01" -WaitSeconds 30
 
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Cyan

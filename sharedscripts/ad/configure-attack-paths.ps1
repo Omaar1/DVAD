@@ -1,6 +1,6 @@
 # configure-attack-paths.ps1
-# Configures realistic AD attack paths for the SilentRUN-Lab red team environment.
-# Run on RootDC AFTER create-ad-objects.ps1 has created all users/groups.
+# Configures realistic AD attack paths for the DVAD red team environment.
+# Run on the root DC AFTER create-ad-objects.ps1 has created all users/groups.
 #
 # Attack Chains:
 #   1. Kerberoasting DA           (svc_sqldb)
@@ -9,17 +9,17 @@
 #   4. ForceChangePassword chain  (m.wilson -> k.lee -> Project-Phoenix -> EA)
 #   5. WriteOwner -> GMSA -> DCSync(d.patel -> GMSA-Readers -> gmsa_svc$ -> DC)
 #   6. Delegation attacks         (Unconstrained/Constrained/RBCD - configured in configure-machine-attacks.ps1)
-#   7. AllExtendedRights -> LAPS   (t.brown -> SVR1$)
+#   7. AllExtendedRights -> LAPS   (t.brown -> SRV01$)
 
 Import-Module ActiveDirectory -ErrorAction Stop
-. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
-. C:\vagrant\sharedscripts\ad\Set-AdAce.ps1
+. C:\vagrant\sharedscripts\invoke-as-user-task.ps1
+. C:\vagrant\sharedscripts\ad\set-ad-ace.ps1
 
 $domainDN  = (Get-ADDomain).DistinguishedName
 $domainDNS = (Get-ADDomain).DNSRoot
 
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+. C:\vagrant\sharedscripts\get-lab-config.ps1
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 $cfg      = Get-LabConfig
 $adminPw  = $cfg.domain.administratorPassword
 $netbios  = $cfg.domain.netbiosName
@@ -136,7 +136,7 @@ Write-Host "  [AS-REP] j.martinez: DoesNotRequirePreAuth = True" -ForegroundColo
 
 # r.chen is a member of the builtin Account Operators (its power: account/group
 # control + DC logon). Account Operators is SDProp-protected, so r.chen would get
-# adminCount=1 and inheritance broken, wiping the GenericWrite ACE below. anonBind.ps1
+# adminCount=1 and inheritance broken, wiping the GenericWrite ACE below. enable-anonymous-bind.ps1
 # already excluded Account Operators from SDProp (dSHeuristics char-16=1); clear any
 # stamp left from before that ran so the ACE persists.
 $rchen = Get-ADUser r.chen -Properties adminCount
@@ -164,11 +164,11 @@ Write-Host "[Chain 3] GPP cpassword -> Backup Operators (svc_backup -> offline N
 
 # svc_backup's power is the builtin Backup Operators (SeBackup/SeRestore + DC logon),
 # which survives SDProp because it is group membership, not an ACE. svc_backup is
-# reached via the GPP cpassword planted in SYSVOL by configure-ch3-gpp.ps1, so it
+# reached via the GPP cpassword planted in SYSVOL by configure-chain3-gpp.ps1, so it
 # needs NO inbound ACE (nothing for SDProp to strip).
 Add-ADGroupMember -Identity "Backup Operators" -Members "svc_backup" -ErrorAction SilentlyContinue
 Write-Host "  [GROUP] svc_backup added to Backup Operators"
-Write-Host "  [OK] Backup Operators membership ready (creds disclosed via GPP - configure-ch3-gpp.ps1)" -ForegroundColor Green
+Write-Host "  [OK] Backup Operators membership ready (creds disclosed via GPP - configure-chain3-gpp.ps1)" -ForegroundColor Green
 
 # ============================================================================
 # CHAIN 4: ForceChangePassword -> Self/AddMember -> WriteDACL -> Enterprise Admin
@@ -178,9 +178,9 @@ Write-Host "  [OK] Backup Operators membership ready (creds disclosed via GPP - 
 Write-Host ""
 Write-Host "[Chain 4] GPO abuse -> SYSTEM on DC (Project-Phoenix edits a DC-linked GPO)" -ForegroundColor Green
 Write-Host "  [INFO] GPO creation, DC-OU link, and edit delegation to Project-Phoenix are" -ForegroundColor Gray
-Write-Host "         handled by configure-ch4-gpo.ps1. Entry is the Ch8 anon foothold:" -ForegroundColor Gray
+Write-Host "         handled by configure-chain4-gpo.ps1. Entry is the Ch8 anon foothold:" -ForegroundColor Gray
 Write-Host "         anon -> y.chen (Project-Phoenix) -> GPO edit -> SYSTEM on DC -> DA." -ForegroundColor Gray
-Write-Host "  [OK] Chain 4 handled in configure-ch4-gpo.ps1" -ForegroundColor Green
+Write-Host "  [OK] Chain 4 handled in configure-chain4-gpo.ps1" -ForegroundColor Green
 
 # ============================================================================
 # CHAIN 5: WriteOwner -> ReadGMSAPassword -> GenericAll on DC -> DCSync
@@ -192,7 +192,7 @@ Write-Host "[Chain 5] GMSA/DCSync chain (d.patel -> GMSA-Readers -> gmsa_svc$ ->
 
 $gmsaScript = @"
 Import-Module ActiveDirectory
-. C:\vagrant\sharedscripts\ad\Set-AdAce.ps1
+. C:\vagrant\sharedscripts\ad\set-ad-ace.ps1
 `$domainDNS = (Get-ADDomain).DNSRoot
 `$domainDN  = (Get-ADDomain).DistinguishedName
 
@@ -233,15 +233,15 @@ Write-Host "  [OK] WriteOwner -> GMSA -> DCSync chain ready" -ForegroundColor Gr
 
 # ============================================================================
 # CHAIN 7: AllExtendedRights -> LAPS -> Lateral Movement
-# t.brown -> AllExtendedRights on SVR1$ -> can read LAPS password -> local admin on SVR1.
-# Both halves run after SVR1 joins (it does not exist yet at this point):
+# t.brown -> AllExtendedRights on SRV01$ -> can read LAPS password -> local admin on SRV01.
+# Both halves run after SRV01 joins (it does not exist yet at this point):
 #   - The AD schema is extended by install-laps-schema.ps1 (runs earlier on this DC
 #     via the official AdmPwd.PS module).
-#   - The AllExtendedRights ACE and SVR1's ms-Mcs-AdmPwd value are set by
-#     configure-machine-attacks.ps1, which runs on SVR1 as the last lab step.
+#   - The AllExtendedRights ACE and SRV01's ms-Mcs-AdmPwd value are set by
+#     configure-machine-attacks.ps1, which runs on SRV01 as the last lab step.
 # ============================================================================
 Write-Host ""
-Write-Host "[Chain 7] LAPS / AllExtendedRights -> deferred to configure-machine-attacks.ps1 (after SVR1 joins)" -ForegroundColor Green
+Write-Host "[Chain 7] LAPS / AllExtendedRights -> deferred to configure-machine-attacks.ps1 (after SRV01 joins)" -ForegroundColor Green
 
 # ============================================================================
 # ADDITIONAL GROUP MEMBERSHIPS
@@ -271,7 +271,7 @@ foreach ($u in $fsUsers) {
 Write-Host "  [GROUP] File-Share-Access populated"
 
 # Anonymous LDAP bind (dSHeuristics) and SMB null-session are applied by their own
-# wired-in steps that run after this script: tools/anonBind.ps1 and tools/null-session.ps1.
+# wired-in steps that run after this script: tools/enable-anonymous-bind.ps1 and tools/enable-null-session.ps1.
 
 # ============================================================================
 # SUMMARY
@@ -286,9 +286,9 @@ Write-Host " Chain 2: AS-REP + ShadowCreds j.martinez -> GenericWrite r.chen -> 
 Write-Host " Chain 3: GPP cpassword        svc_backup (SYSVOL) -> Backup Operators -> NTDS" -ForegroundColor White
 Write-Host " Chain 4: GPO abuse            Project-Phoenix -> DC-linked GPO -> SYSTEM on DC" -ForegroundColor White
 Write-Host " Chain 5: GMSA/DCSync         d.patel -> GMSA-Readers -> gmsa_svc$ -> DC" -ForegroundColor White
-Write-Host " Chain 6: Delegation          SVR1 (Unconstrained) | svc_web (Constrained) | ADCS (RBCD)" -ForegroundColor White
+Write-Host " Chain 6: Delegation          SRV01 (Unconstrained) | svc_web (Constrained) | CA01 (RBCD)" -ForegroundColor White
 Write-Host "          (configured in configure-machine-attacks.ps1 after all VMs join)" -ForegroundColor Gray
-Write-Host " Chain 7: LAPS                t.brown -> AllExtendedRights -> SVR1$ LAPS password" -ForegroundColor White
+Write-Host " Chain 7: LAPS                t.brown -> AllExtendedRights -> SRV01$ LAPS password" -ForegroundColor White
 Write-Host ""
 Write-Host " ACL types configured: GenericAll, GenericWrite, WriteDACL, WriteOwner" -ForegroundColor Gray
 Write-Host "                       ForceChangePassword, Self-Membership, AllExtendedRights" -ForegroundColor Gray

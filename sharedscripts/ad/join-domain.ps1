@@ -7,8 +7,8 @@ param(
 
 # Joins this machine to the domain defined in lab-config.json (optionally into -ou).
 
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+. C:\vagrant\sharedscripts\get-lab-config.ps1
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 $cfg    = Get-LabConfig
 $domain = $cfg.domain
 $dcIp   = $cfg.hosts.rootdc.ip

@@ -5,7 +5,7 @@
     ESC5: Grants GenericAll on the CA AD object to l.garcia
           -> l.garcia can modify CA settings, add templates, or change the CA cert
     ESC6: Enables EDITF_ATTRIBUTESUBJECTALTNAME2 flag on the CA
-          -> Any domain user can request a cert with arbitrary SAN (e.g., administrator@silent.run)
+          -> Any domain user can request a cert with arbitrary SAN (e.g., administrator@dvad.lab)
     ESC7: Grants ManageCA permission to a.johnson (IT Helpdesk)
           -> a.johnson can grant herself ManageCertificates or enable EDITF_ATTRIBUTESUBJECTALTNAME2
     ESC8: Ensures Web Enrollment is accessible over HTTP with NTLM auth (relay-vulnerable)
@@ -15,7 +15,7 @@
     Called from install-adcs.ps1 after ESC1-4 template creation.
 #>
 
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+. C:\vagrant\sharedscripts\get-lab-config.ps1
 $forest = (Get-LabConfig).domain
 
 $caName = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration" -Name Active -ErrorAction SilentlyContinue).Active
@@ -25,8 +25,8 @@ Write-Host "[*] CA Name: $caName" -ForegroundColor Cyan
 
 # Domain-admin credentials for AD writes. ESC5 writes an ACE onto the CA object in
 # the Configuration NC, which the local WinRM identity cannot do. We run that block
-# under a real logon token via a one-shot scheduled task (see Invoke-AsUserTask.ps1).
-. C:\vagrant\sharedscripts\Invoke-AsUserTask.ps1
+# under a real logon token via a one-shot scheduled task (see invoke-as-user-task.ps1).
+. C:\vagrant\sharedscripts\invoke-as-user-task.ps1
 $escUser = "$($forest.netbiosName)\Administrator"
 
 # ============================================================
@@ -38,7 +38,7 @@ Write-Host "`n[*] === ESC5: GenericAll on CA AD object for l.garcia ===" -Foregr
 # local CertSvc registry itself (single-quoted here-string: nothing expands here).
 $esc5Script = @'
 Import-Module ActiveDirectory -ErrorAction Stop
-. C:\vagrant\sharedscripts\ad\Set-AdAce.ps1
+. C:\vagrant\sharedscripts\ad\set-ad-ace.ps1
 $caName     = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration" -Name Active).Active
 $domainDN   = (Get-ADDomain).DistinguishedName
 $caObjectDN = "CN=$caName,CN=Enrollment Services,CN=Public Key Services,CN=Services,CN=Configuration,$domainDN"

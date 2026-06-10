@@ -385,7 +385,7 @@
       "path": "OU=Service Accounts,",
       "title": "SQL Database Service", "department": "Service Accounts",
       "password": "Passw0rd",
-      "spn": "MSSQLSvc/SVR1.silent.run:1433",
+      "spn": "MSSQLSvc/SRV01.dvad.lab:1433",
       "groups": ["Domain Admins", "DB-Admins"]
     },
     {
@@ -402,7 +402,7 @@
       "path": "OU=Service Accounts,",
       "title": "Web Application Service", "department": "Service Accounts",
       "password": "Monkey123",
-      "spn": "HTTP/web.silent.run",
+      "spn": "HTTP/web.dvad.lab",
       "groups": ["IT-Team"]
     },
     {
@@ -411,7 +411,7 @@
       "path": "OU=Service Accounts,",
       "title": "Exchange Service Account", "department": "Service Accounts",
       "password": "Exch@nge#Svc2025!!",
-      "spn": "exchangeMDB/ROOTDC.silent.run",
+      "spn": "exchangeMDB/DVAD-DC.dvad.lab",
       "groups": ["IT-Team"]
     },
     {
@@ -420,7 +420,7 @@
       "path": "OU=Service Accounts,",
       "title": "Print Spooler Service", "department": "Service Accounts",
       "password": "Pr!nt#Sp00ler2025!",
-      "spn": "printservice/SVR1.silent.run",
+      "spn": "printservice/SRV01.dvad.lab",
       "groups": []
     },
     {
@@ -429,7 +429,7 @@
       "path": "OU=Service Accounts,",
       "title": "File Share Service", "department": "Service Accounts",
       "password": "F!leSh@re#Svc2025!",
-      "spn": "CIFS/files.silent.run",
+      "spn": "CIFS/files.dvad.lab",
       "groups": ["File-Share-Access"]
     }
   ]

@@ -1,4 +1,4 @@
-# Set-AdAce.ps1
+# set-ad-ace.ps1
 # ------------------------------------------------------------------------------
 # Idempotent ACE writer for AD objects. Dot-source this file, then call
 # Add-AdAceIfMissing to add an ActiveDirectoryAccessRule to an [ADSI] object only

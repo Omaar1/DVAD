@@ -1,8 +1,8 @@
-# SilentRUN Lab — Operations Guide
+# DVAD (Damn Vulnerable Active Directory) — Operations Guide
 
 ## Overview
 
-SilentRUN-Lab is a fully automated red team lab covering AD, ADCS, SCCM, and a generic member server. Everything provisions from a single `vagrant up`.
+DVAD is a fully automated red team lab covering AD, ADCS, SCCM, and a generic member server. Everything provisions from a single `vagrant up`.
 
 ---
 
@@ -10,13 +10,17 @@ SilentRUN-Lab is a fully automated red team lab covering AD, ADCS, SCCM, and a g
 
 | VM | vCPUs | RAM | IP |
 |---|---|---|---|
-| RootDC | 2 | 2 GB | 10.10.10.100 |
-| ADCS | 2 | 2 GB | 10.10.10.103 |
-| SCCM | 2 | 8 GB | 10.10.10.104 |
-| SVR1 | 2 | 2 GB | 10.10.10.150 |
+| DVAD-DC | 2 | 2 GB | 10.10.10.100 |
+| CA01 | 2 | 2 GB | 10.10.10.103 |
+| CM01 | 2 | 8 GB | 10.10.10.104 |
+| SRV01 | 2 | 2 GB | 10.10.10.150 |
 | **Total** | **8** | **~14 GB** | — |
 
 Host requirement: 16 GB RAM minimum, 32 GB recommended.
+
+> **Stubbed in `lab-config.json`, not built yet:** `SQL01` (standalone MSSQL, 10.10.10.105)
+> and `HQ-DC` (child domain `hq.dvad.lab`, 10.10.10.101). Defined in config so they can be
+> referenced now and provisioned later; the current 4-VM lab works without them.
 
 ---
 
@@ -36,14 +40,14 @@ Host requirement: 16 GB RAM minimum, 32 GB recommended.
 **Note on large downloads:**
 - MECM (SCCM) installer: ~1.2 GB — auto-downloaded during provisioning.
   Pre-stage `MEM_Configmgr_Eval.exe` in `sharedscripts/services/SCCM/MECM_Setup/` to skip download.
-- SQL Server 2019: downloaded by `installSQL.ps1` if not cached.
+- SQL Server 2019: downloaded by `install-sql.ps1` if not cached.
 
 ---
 
 ## Running the Lab
 
 ```powershell
-cd d:\silenRun\lab-creation
+cd C:\DVAD   # path where you cloned the repo
 
 # Full automated provisioning (60-90 min)
 vagrant up
@@ -59,7 +63,7 @@ vagrant up
 ```powershell
 vagrant status          # Check all VM states
 vagrant halt            # Stop all VMs
-vagrant up <name>       # Start specific VM
+vagrant up <name>       # Start specific VM (DVAD-DC, CA01, CM01, SRV01)
 vagrant destroy -f      # Destroy all VMs (clean slate)
 ```
 
@@ -69,12 +73,12 @@ vagrant destroy -f      # Destroy all VMs (clean slate)
 
 | Account | Password | Notes |
 |---|---|---|
-| `SILENT\Administrator` | `P@ssw0rd` | Domain Admin on all VMs |
-| `SILENT\svc_sqldb` | `Passw0rd` | Kerberoastable DA |
-| `SILENT\svc_backup` | `Trustno1!` | Backup Operators |
-| `SILENT\svc_web` | `Monkey123` | Constrained delegation |
-| `SILENT\j.martinez` | `P@ssw0rd1` | AS-REP Roastable |
-| `SILENT\r.chen` | `Password1` | Part of AS-REP chain |
+| `DVAD\Administrator` | `P@ssw0rd` | Domain Admin on all VMs |
+| `DVAD\svc_sqldb` | `Passw0rd` | Kerberoastable DA |
+| `DVAD\svc_backup` | `Trustno1!` | Backup Operators |
+| `DVAD\svc_web` | `Monkey123` | Constrained delegation |
+| `DVAD\j.martinez` | `P@ssw0rd1` | AS-REP Roastable |
+| `DVAD\r.chen` | `Password1` | Part of AS-REP chain |
 
 ---
 
@@ -83,35 +87,35 @@ vagrant destroy -f      # Destroy all VMs (clean slate)
 ### CRED-1: PXE Boot & NAA Credential Theft
 - **Vulnerability**: PXE boot enabled without password protection.
 - **Attack**: Boot unknown machine from network. Retrieve `variables.dat` via TFTP.
-- **Credential exposed**: `SILENT\sccm_naa`
-- **Script**: `sharedscripts/services/SCCM/Vuln-NAA-PXE.ps1`
+- **Credential exposed**: `DVAD\sccm_naa`
+- **Script**: `sharedscripts/services/SCCM/configure-vuln-pxe.ps1`
 
 ### CRED-2: Task Sequence Variable Exposure
 - **Vulnerability**: Task sequence deployed to All Systems with embedded credentials.
 - **Attack**: Request policy as a registered machine. Extract OSD secrets.
-- **Credentials**: `SILENT\sccm_dja` (Domain Join), `AWS_Migration_Secret` (custom variable)
-- **Script**: `sharedscripts/services/SCCM/Vuln-TS-Variables.ps1`
+- **Credentials**: `DVAD\sccm_dja` (Domain Join), `AWS_Migration_Secret` (custom variable)
+- **Script**: `sharedscripts/services/SCCM/configure-vuln-ts-variables.ps1`
 
 ### CRED-3: Client Push NTLM Coercion
-- **Vulnerability**: Client push enabled with `SILENT\sccm_cpia` account.
+- **Vulnerability**: Client push enabled with `DVAD\sccm_cpia` account.
 - **Attack**: Control a machine being pushed to; relay NTLM auth or dump via LSASS.
-- **Script**: `sharedscripts/services/SCCM/Vuln-ClientPush.ps1`
+- **Script**: `sharedscripts/services/SCCM/configure-vuln-client-push.ps1`
 
 ### CRED-4: Anonymous Distribution Point Looting
 - **Vulnerability**: Package on DP with hardcoded credentials.
 - **Attack**: Anonymous access to DP; download packages containing secrets.
-- **Script**: `sharedscripts/services/SCCM/Vuln-App-Package.ps1`
+- **Script**: `sharedscripts/services/SCCM/configure-vuln-app-package.ps1`
 
 ---
 
 ## Attack Vectors — Active Directory
 
 ### Chain 1: Kerberoasting
-- `GetUserSPNs.py silent.run/j.martinez:P@ssw0rd1 -dc-ip 10.10.10.100 -request`
+- `GetUserSPNs.py dvad.lab/j.martinez:P@ssw0rd1 -dc-ip 10.10.10.100 -request`
 - Cracks `svc_sqldb` TGS hash → Domain Admin
 
 ### Chain 2: AS-REP Roasting
-- `GetNPUsers.py silent.run/ -no-pass -usersfile users.txt -dc-ip 10.10.10.100`
+- `GetNPUsers.py dvad.lab/ -no-pass -usersfile users.txt -dc-ip 10.10.10.100`
 - `j.martinez` returns AS-REP hash → crack offline → GenericWrite on `r.chen` → WriteOwner on Server-Admins → WriteDACL on Domain Admins
 
 ### Chain 3: ACL Abuse (GenericAll)
@@ -129,21 +133,21 @@ vagrant destroy -f      # Destroy all VMs (clean slate)
 - Take ownership → add self → retrieve `gmsa_svc$` password
 - `gmsa_svc$` has DS-Replication rights → DCSync
 
-### Chain 6a: Unconstrained Delegation (SVR1)
-- Coerce RootDC to authenticate to SVR1 (e.g., PrinterBug / PetitPotam)
-- Extract TGT from SVR1 memory → pass-the-ticket as DC → DCSync
+### Chain 6a: Unconstrained Delegation (SRV01)
+- Coerce DVAD-DC to authenticate to SRV01 (e.g., PrinterBug / PetitPotam)
+- Extract TGT from SRV01 memory → pass-the-ticket as DC → DCSync
 
 ### Chain 6b: Constrained Delegation (svc_web)
-- `svc_web` can delegate to `CIFS/ROOTDC` with protocol transition
-- `getST.py -spn CIFS/ROOTDC.silent.run -impersonate Administrator silent.run/svc_web:Monkey123`
+- `svc_web` can delegate to `CIFS/DVAD-DC` with protocol transition
+- `getST.py -spn CIFS/DVAD-DC.dvad.lab -impersonate Administrator dvad.lab/svc_web:Monkey123`
 
-### Chain 6c: RBCD (l.garcia → ADCS$)
-- `l.garcia` has GenericWrite on `ADCS$`
-- Write `msDS-AllowedToActOnBehalfOfOtherIdentity` to abuse RBCD against ADCS
+### Chain 6c: RBCD (l.garcia → CA01$)
+- `l.garcia` has GenericWrite on `CA01$`
+- Write `msDS-AllowedToActOnBehalfOfOtherIdentity` to abuse RBCD against CA01
 
 ### Chain 7: LAPS
-- `t.brown` has AllExtendedRights on `SVR1$`
-- `Get-ADComputer SVR1 -Properties ms-Mcs-AdmPwd` → local admin password on SVR1
+- `t.brown` has AllExtendedRights on `SRV01$`
+- `Get-ADComputer SRV01 -Properties ms-Mcs-AdmPwd` → local admin password on SRV01
 
 ---
 
@@ -161,7 +165,7 @@ vagrant destroy -f      # Destroy all VMs (clean slate)
 | ESC8 | NTLM relay to http://10.10.10.103/certsrv/ | Network attacker |
 | Certifried | CVE-2022-26923 — machine cert spoofing | Any domain user |
 
-**Tools:** `certipy find -u j.martinez@silent.run -p P@ssw0rd1 -dc-ip 10.10.10.100`
+**Tools:** `certipy find -u j.martinez@dvad.lab -p P@ssw0rd1 -dc-ip 10.10.10.100`
 
 ---
 
@@ -169,7 +173,7 @@ vagrant destroy -f      # Destroy all VMs (clean slate)
 
 ```bash
 # Anonymous LDAP (dSHeuristics set)
-ldapsearch -x -H ldap://10.10.10.100 -b "DC=silent,DC=run"
+ldapsearch -x -H ldap://10.10.10.100 -b "DC=dvad,DC=lab"
 
 # Null session
 smbclient -N //10.10.10.100/IPC$

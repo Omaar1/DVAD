@@ -2,15 +2,17 @@
 .vagrant/
 *.box
 
-# Lab Artifacts & Junk
+# Lab Artifacts & Junk (runtime output)
 junk/
-autolab/
-vulns/
 *.log
-*.txt
-*.xml
-*.html
 *.evtx
+
+# Vendored attacker tooling + Obsidian vault (not tracked; fetched/kept out-of-band).
+# These whole trees are ignored, so repo-wide *.txt/*.xml/*.html globs are unnecessary
+# and only risk silently hiding a needed file elsewhere.
+autolab/
+AutoLab/
+vulns/
 
 # Large Binaries & ISOs
 *.code-workspace
@@ -38,10 +40,10 @@ Desktop.ini
 # Claude AI assistant files
 .claude/
 
-!sharedscripts/services/SCCM/DeploymentConfigTemplate.xml
+# DeploymentConfigTemplate.xml is now tracked normally (no repo-wide *.xml ignore).
 !sharedscripts/services/SCCM/extendSchema/*.dll
 
-# .NET 3.5 is installed fully offline by installDepRoles.ps1 from a pre-staged
+# .NET 3.5 is installed fully offline by install-dep-roles.ps1 from a pre-staged
 # NetFx3 source. Ignore anything else dropped into the sxs folder, but DO ship the
 # two NetFx3 cabs so a fresh clone can install .NET 3.5 without internet/Windows Update.
 sharedscripts/services/SCCM/sxs/*

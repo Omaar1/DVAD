@@ -1,4 +1,4 @@
-Import-Module C:\vagrant\sharedscripts\PhaseTimer.psm1 -Force
+Import-Module C:\vagrant\sharedscripts\phase-timer.psm1 -Force
 Start-PhaseTimer -PhaseName "DISABLE LICENSE SERVICE"
 
 # Define the path to PsExec executable

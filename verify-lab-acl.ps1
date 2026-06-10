@@ -1,12 +1,17 @@
 # verify-lab-acl.ps1
-# Ground-truth, full-chain validation of the SilentRUN-Lab attack paths. Run in an
-# elevated PowerShell ON ROOTDC after the lab is fully provisioned (all VMs joined).
+# Ground-truth, full-chain validation of the DVAD attack paths. Run in an
+# elevated PowerShell ON the root DC after the lab is fully provisioned (all VMs joined).
 # Reads real directory state (ACEs by SID+rights+GUID, group membership, GPOs, SYSVOL,
 # dSHeuristics) - no attacker tooling, no string-grep guesswork.
 # Exit code 0 if no FAIL, 1 otherwise.
 
 Import-Module ActiveDirectory
 Import-Module GroupPolicy -ErrorAction SilentlyContinue
+
+. "$PSScriptRoot\sharedscripts\get-lab-config.ps1"
+$cfg      = Get-LabConfig
+$svr1Name = $cfg.hosts.svr1.name
+$adcsName = $cfg.hosts.adcs.name
 
 $dn      = (Get-ADDomain).DistinguishedName
 $dnsRoot = (Get-ADDomain).DNSRoot
@@ -97,27 +102,27 @@ chk "gmsa_svc exists" ([bool](Get-ADServiceAccount gmsa_svc -EA SilentlyContinue
 chk "DCSync repl gmsa_svc -> domain root"     (Test-Ace 'gmsa_svc' $dn ExtendedRight $G_REPL)
 chk "DCSync repl-all gmsa_svc -> domain root" (Test-Ace 'gmsa_svc' $dn ExtendedRight $G_RALL)
 
-head "Chain 6 - Delegation (set by configure-machine-attacks.ps1 on server1)"
-$svr1 = Get-ADComputer SVR1 -Properties TrustedForDelegation -EA SilentlyContinue
-$adcsC = Get-ADComputer ADCS -EA SilentlyContinue
+head "Chain 6 - Delegation (set by configure-machine-attacks.ps1 on the member server)"
+$svr1 = Get-ADComputer $svr1Name -Properties TrustedForDelegation -EA SilentlyContinue
+$adcsC = Get-ADComputer $adcsName -EA SilentlyContinue
 if ($svr1) {
-    chk "SVR1 unconstrained (TrustedForDelegation)" ($svr1.TrustedForDelegation)
+    chk "$svr1Name unconstrained (TrustedForDelegation)" ($svr1.TrustedForDelegation)
     $web = Get-ADUser svc_web -Properties 'msDS-AllowedToDelegateTo',TrustedToAuthForDelegation
     chk "svc_web constrained delegation set" ([bool]$web.'msDS-AllowedToDelegateTo')
     chk "svc_web protocol transition"        ($web.TrustedToAuthForDelegation)
-    if ($adcsC) { chk "GenericWrite l.garcia -> ADCS$ (RBCD target)" (Test-Ace 'l.garcia' $adcsC.DistinguishedName GenericWrite) }
-    else        { skip "ADCS computer not joined yet" }
+    if ($adcsC) { chk "GenericWrite l.garcia -> $adcsName`$ (RBCD target)" (Test-Ace 'l.garcia' $adcsC.DistinguishedName GenericWrite) }
+    else        { skip "$adcsName computer not joined yet" }
 } else {
-    skip "SVR1 not joined yet - Chain 6 (SVR1/svc_web/l.garcia) is applied last on server1; re-run after it finishes"
+    skip "$svr1Name not joined yet - Chain 6 ($svr1Name/svc_web/l.garcia) is applied last on the member server; re-run after it finishes"
 }
 chk "MachineAccountQuota = 10 (RBCD: attacker can add a computer)" (((Get-ADObject $dn -Properties 'ms-DS-MachineAccountQuota').'ms-DS-MachineAccountQuota') -eq 10)
 
-head "Chain 7 - LAPS (set by configure-machine-attacks.ps1 on server1)"
+head "Chain 7 - LAPS (set by configure-machine-attacks.ps1 on the member server)"
 if ($svr1) {
-    chk "AllExtendedRights t.brown -> SVR1$" (Test-Ace 't.brown' $svr1.DistinguishedName ExtendedRight ([guid]::Empty))
-    chk "SVR1 ms-Mcs-AdmPwd planted" ([bool](Get-ADComputer SVR1 -Properties 'ms-Mcs-AdmPwd').'ms-Mcs-AdmPwd')
+    chk "AllExtendedRights t.brown -> $svr1Name`$" (Test-Ace 't.brown' $svr1.DistinguishedName ExtendedRight ([guid]::Empty))
+    chk "$svr1Name ms-Mcs-AdmPwd planted" ([bool](Get-ADComputer $svr1Name -Properties 'ms-Mcs-AdmPwd').'ms-Mcs-AdmPwd')
 } else {
-    skip "SVR1 not joined yet - Chain 7 is applied last on server1; re-run after it finishes"
+    skip "$svr1Name not joined yet - Chain 7 is applied last on the member server; re-run after it finishes"
 }
 
 head "Chain 8 - Anonymous bind -> description leak"

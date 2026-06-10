@@ -21,11 +21,11 @@ param(
 # ==============================================================================
 
 # --- IMPORT PHASE TIMER MODULE ---
-$TimerModule = "C:\vagrant\sharedscripts\PhaseTimer.psm1"
+$TimerModule = "C:\vagrant\sharedscripts\phase-timer.psm1"
 if (Test-Path $TimerModule) { Import-Module $TimerModule -Force -ErrorAction SilentlyContinue } 
 
 # --- CONFIGURATION VARIABLES ---
-. C:\vagrant\sharedscripts\Get-LabConfig.ps1
+. C:\vagrant\sharedscripts\get-lab-config.ps1
 $cfg = Get-LabConfig
 $netbios = $cfg.domain.netbiosName
 $SiteCode = $cfg.sccm.siteCode
@@ -39,7 +39,7 @@ $TargetAdminUser = "$netbios\Administrator"
 $TargetAdminPass = $cfg.domain.administratorPassword
 
 # ==============================================================================
-# NAA EXECUTION MODE (Called via Scheduled Task as SILENT\Administrator)
+# NAA EXECUTION MODE (Called via Scheduled Task as DVAD\Administrator)
 # ==============================================================================
 if ($NAAExecutionMode) {
     Start-Transcript -Path "C:\CRED1_NAA_Exec_Log.txt" -Force
@@ -47,7 +47,7 @@ if ($NAAExecutionMode) {
     
     # 1. Load module + connect to site
     try {
-        . C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+        . C:\vagrant\sharedscripts\services\SCCM\connect-cm-site.ps1
         Connect-CMSite -SiteCode $SiteCode -SiteServer $SiteServer
     }
     catch {
@@ -103,7 +103,7 @@ if ($NAAExecutionMode) {
 # ==============================================================================
 
 # INITIALIZATION: LOAD MODULE & CONNECT TO SITE
-. C:\vagrant\sharedscripts\services\SCCM\Connect-CMSite.ps1
+. C:\vagrant\sharedscripts\services\SCCM\connect-cm-site.ps1
 Connect-CMSite -SiteCode $SiteCode -SiteServer $SiteServer
 
 # ==============================================================================
@@ -453,7 +453,7 @@ try {
     # Copy self to temp
     Copy-Item -Path $MyInvocation.MyCommand.Definition -Destination $TempScript -Force
     if (Test-Path $TimerModule) {
-        Copy-Item -Path $TimerModule -Destination "C:\Windows\Temp\PhaseTimer.psm1" -Force
+        Copy-Item -Path $TimerModule -Destination "C:\Windows\Temp\phase-timer.psm1" -Force
     }
     
     # Remove old log

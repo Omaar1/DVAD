@@ -4,11 +4,11 @@
 ![Language](https://img.shields.io/badge/Automation-PowerShell-5391FE?style=for-the-badge&logo=powershell)
 ![Focus](https://img.shields.io/badge/Focus-AD_/_ADCS_/_SCCM-red?style=for-the-badge)
 
-# SilentRUN-Lab — AutoAD Attack Range
+# Damn Vulnerable Active Directory (DVAD) — AutoAD Attack Range
 
 > **A zero-touch Infrastructure-as-Code pipeline that deploys a realistic, deliberately vulnerable enterprise Active Directory environment — ready for red team exercises in under an hour.**
 
-Manually building multi-server Windows lab environments for security research takes days and is error-prone. SilentRUN-Lab eliminates that overhead. A single `vagrant up` provisions a fully functional AD forest with a Certificate Authority, SQL Server, MECM/SCCM, and a domain-joined member server — all pre-configured with intentional security misconfigurations that mirror real-world enterprise flaws.
+Manually building multi-server Windows lab environments for security research takes days and is error-prone. DVAD eliminates that overhead. A single `vagrant up` provisions a fully functional AD forest with a Certificate Authority, SQL Server, MECM/SCCM, and a domain-joined member server — all pre-configured with intentional security misconfigurations that mirror real-world enterprise flaws.
 
 ---
 
@@ -16,35 +16,40 @@ Manually building multi-server Windows lab environments for security research ta
 
 ```
                     ┌──────────────────────────────┐
-                    │      silent.run (Forest)      │
-                    │           ROOTDC              │
+                    │       dvad.lab (Forest)       │
+                    │            DVAD-DC            │
                     │        10.10.10.100           │
                     └───────────┬──────────────────┘
                                 │
          ┌──────────────────────┼──────────────────────┬─────────────────┐
          │                      │                      │                 │
 ┌────────┴────────┐  ┌──────────┴──────┐  ┌───────────┴──────┐ ┌───────┴──────┐
-│   ADCS          │  │   SCCM / MECM   │  │   SQL Server      │ │    SVR1      │
+│   CA01          │  │   CM01 / MECM   │  │   SQL Server      │ │    SRV01     │
 │   Certificate   │  │   Config Mgr    │  │   (co-hosted on   │ │ Member Server│
-│   Authority     │  │   10.10.10.104  │  │    SCCM node)     │ │ 10.10.10.150 │
+│   Authority     │  │   10.10.10.104  │  │    CM01 node)     │ │ 10.10.10.150 │
 │   10.10.10.103  │  └─────────────────┘  └───────────────────┘ └──────────────┘
 └─────────────────┘
 ```
 
 | Machine | IP Address | Role | vCPUs | RAM |
 | --- | --- | --- | --- | --- |
-| **RootDC** | `10.10.10.100` | Forest Root DC / Primary DNS | 2 | 2 GB |
-| **ADCS** | `10.10.10.103` | Enterprise Root Certificate Authority | 2 | 2 GB |
-| **SCCM** | `10.10.10.104` | Microsoft Endpoint Configuration Manager + SQL | 2 | 8 GB |
-| **SVR1** | `10.10.10.150` | Domain-joined Member Server | 2 | 2 GB |
+| **DVAD-DC** | `10.10.10.100` | Forest Root DC / Primary DNS | 2 | 2 GB |
+| **CA01** | `10.10.10.103` | Enterprise Root Certificate Authority | 2 | 2 GB |
+| **CM01** | `10.10.10.104` | Microsoft Endpoint Configuration Manager + SQL | 2 | 8 GB |
+| **SRV01** | `10.10.10.150` | Domain-joined Member Server | 2 | 2 GB |
 
 **Total lab RAM: ~14 GB** — 16 GB host minimum, 32 GB recommended.
+
+> **Planned (stubbed in `lab-config.json`, not built yet):** `SQL01` (standalone MSSQL,
+> `10.10.10.105`) and `HQ-DC` (child domain `hq.dvad.lab`, `10.10.10.101`). They are
+> defined in config so they can be referenced now and provisioned later without code
+> changes — the current 4-VM lab is fully functional without them.
 
 ---
 
 ## Why This Exists
 
-Setting up AD, ADCS, SQL, and MECM concurrently is resource-intensive and brittle. Security teams end up spending days on infrastructure instead of practicing attack paths. SilentRUN-Lab solves this with:
+Setting up AD, ADCS, SQL, and MECM concurrently is resource-intensive and brittle. Security teams end up spending days on infrastructure instead of practicing attack paths. DVAD solves this with:
 
 - **Zero-touch provisioning** — Vagrant and PowerShell handle everything from forest creation to vulnerability injection
 - **Offline payload handling** — DISM-based .NET/ADK installation and pre-staged MECM installers keep provisioning reliable on slow or air-gapped networks
@@ -55,11 +60,11 @@ Setting up AD, ADCS, SQL, and MECM concurrently is resource-intensive and brittl
 
 ## Lab Components & Attack Paths
 
-### 1. RootDC — Forest Root Domain Controller
+### 1. DVAD-DC — Forest Root Domain Controller
 
-Provisions the `silent.run` AD forest, creates the root domain, and populates Active Directory with OUs, tiered security groups, 50+ user accounts, and service accounts. Serves as the primary DNS server.
+Provisions the `dvad.lab` AD forest, creates the root domain, and populates Active Directory with OUs, tiered security groups, 50+ user accounts, and service accounts. Serves as the primary DNS server.
 
-- **Domain:** `silent.run` (NetBIOS: `SILENT`)
+- **Domain:** `dvad.lab` (NetBIOS: `DVAD`)
 - **Resources:** 2 vCPUs, 2 GB RAM
 
 #### Attack Paths
@@ -79,9 +84,9 @@ Provisions the `silent.run` AD forest, creates the root domain, and populates Ac
 
 ---
 
-### 2. ADCS — Active Directory Certificate Services
+### 2. CA01 — Active Directory Certificate Services
 
-Enterprise Root CA joined to `silent.run`. Deployed with vulnerable certificate templates and CA-level misconfigurations covering ESC1-ESC8.
+Enterprise Root CA joined to `dvad.lab`. Deployed with vulnerable certificate templates and CA-level misconfigurations covering ESC1-ESC8.
 
 - **CA Type:** Enterprise Root CA
 - **Resources:** 2 vCPUs, 2 GB RAM
@@ -102,7 +107,7 @@ Enterprise Root CA joined to `silent.run`. Deployed with vulnerable certificate 
 
 ---
 
-### 3. SVR1 — Domain-Joined Member Server
+### 3. SRV01 — Domain-Joined Member Server
 
 Generic Windows Server 2019 domain member used for lateral movement, Kerberos delegation, and LAPS exploitation exercises.
 
@@ -113,13 +118,13 @@ Generic Windows Server 2019 domain member used for lateral movement, Kerberos de
 | Attack | Detail |
 |---|---|
 | **Unconstrained Delegation** | `TrustedForDelegation = $true` — TGTs cached in memory; capture via printer bug / coercion |
-| **Constrained Delegation** | `svc_web` delegates to `CIFS/ROOTDC` with protocol transition (S4U2Self) |
-| **RBCD** | `l.garcia` GenericWrite on `ADCS$` — can set `msDS-AllowedToActOnBehalfOfOtherIdentity` |
-| **LAPS** | `t.brown` has AllExtendedRights on `SVR1$` — reads `ms-Mcs-AdmPwd` (local admin password) |
+| **Constrained Delegation** | `svc_web` delegates to `CIFS/DVAD-DC` with protocol transition (S4U2Self) |
+| **RBCD** | `l.garcia` GenericWrite on `CA01$` — can set `msDS-AllowedToActOnBehalfOfOtherIdentity` |
+| **LAPS** | `t.brown` has AllExtendedRights on `SRV01$` — reads `ms-Mcs-AdmPwd` (local admin password) |
 
 ---
 
-### 4. SCCM — Microsoft Endpoint Configuration Manager
+### 4. CM01 — Microsoft Endpoint Configuration Manager
 
 The primary SCCM attack target. MECM is deployed with unattended SQL provisioning and pre-injected misconfigurations that replicate the most commonly abused SCCM attack surface.
 
@@ -130,9 +135,9 @@ The primary SCCM attack target. MECM is deployed with unattended SQL provisionin
 
 | Attack | Detail |
 |---|---|
-| **CRED-1 — PXE Boot / NAA** | PXE enabled without password — boot unknown machine, retrieve `SILENT\sccm_naa` creds from policy |
+| **CRED-1 — PXE Boot / NAA** | PXE enabled without password — boot unknown machine, retrieve `DVAD\sccm_naa` creds from policy |
 | **CRED-2 — Task Sequence Variables** | Task sequence deployed to All Systems with exposed variables and embedded credentials |
-| **CRED-3 — Client Push** | `SILENT\sccm_cpia` — trigger NTLM coercion during client push to capture hash |
+| **CRED-3 — Client Push** | `DVAD\sccm_cpia` — trigger NTLM coercion during client push to capture hash |
 | **CRED-4 — Anonymous DP Looting** | Distribution point with anonymous access or sensitive package content |
 
 ---
@@ -158,8 +163,8 @@ vagrant plugin install vagrant-windows-sysprep
 ### Deploy
 
 ```powershell
-git clone https://github.com/Omaar1/SilentRUN-Lab.git
-cd SilentRUN-Lab
+git clone https://github.com/Omaar1/DVAD.git
+cd DVAD
 vagrant up
 ```
 
@@ -191,18 +196,18 @@ Checks IP reachability, WinRM connectivity, and key service status for all VMs.
 
 | Account | Password | Attack Path |
 | --- | --- | --- |
-| `SILENT\svc_sqldb` | `Passw0rd` | Kerberoasting (DA + MSSQLSvc SPN) |
-| `SILENT\svc_backup` | `Trustno1!` | NTDS dump via Backup Operators |
-| `SILENT\svc_web` | `Monkey123` | Constrained delegation to CIFS/ROOTDC |
-| `SILENT\j.martinez` | `P@ssw0rd1` | AS-REP Roasting (pre-auth disabled) |
-| `SILENT\sccm_naa` | set by SCCM | PXE/NAA credential theft (CRED-1) |
-| `SILENT\sccm_cpia` | set by SCCM | Client push NTLM coercion (CRED-3) |
+| `DVAD\svc_sqldb` | `Passw0rd` | Kerberoasting (DA + MSSQLSvc SPN) |
+| `DVAD\svc_backup` | `Trustno1!` | NTDS dump via Backup Operators |
+| `DVAD\svc_web` | `Monkey123` | Constrained delegation to CIFS/DVAD-DC |
+| `DVAD\j.martinez` | `P@ssw0rd1` | AS-REP Roasting (pre-auth disabled) |
+| `DVAD\sccm_naa` | set by SCCM | PXE/NAA credential theft (CRED-1) |
+| `DVAD\sccm_cpia` | set by SCCM | Client push NTLM coercion (CRED-3) |
 
 ### Admin Accounts
 
 | Account | Password | Role |
 | --- | --- | --- |
-| `SILENT\Administrator` | `P@ssw0rd` | Domain Admin |
+| `DVAD\Administrator` | `P@ssw0rd` | Domain Admin |
 
 Additional privileged and attack-relevant accounts (e.g. `c.wright`, `m.thompson`,
 `b.anderson` in Domain Admins, and the `svc_*` service accounts) are defined in
@@ -213,49 +218,54 @@ Additional privileged and attack-relevant accounts (e.g. `c.wright`, `m.thompson
 ## Project Structure
 
 ```
-SilentRUN-Lab/
-├── Vagrantfile                              # Lab orchestration and VM definitions
-├── start-lab.ps1                            # Ordered VM startup helper
-├── verify-lab.ps1                           # Post-deploy health check
-├── SilentRUN_Lab_Guide.md                   # Detailed lab notes and attack context
+DVAD/
+├── Vagrantfile                                 # Lab orchestration and VM definitions
+├── start-lab.ps1                               # Ordered VM startup helper
+├── verify-lab.ps1                              # Post-deploy health check
+├── DVAD_Lab_Guide.md                           # Detailed lab notes and attack context
 ├── provision/
 │   └── variables/
-│       ├── lab-config.json                  # Single source of truth: domain, hosts/IPs, box, SCCM settings
-│       └── lab-users.json                   # OUs, groups, departmental users + service accounts
+│       ├── lab-config.json                     # Single source of truth: domain, hosts/IPs, box, SCCM settings
+│       └── lab-users.json                      # OUs, groups, departmental users + service accounts
 └── sharedscripts/
-    ├── Get-LabConfig.ps1                    # Loads lab-config.json (dot-source, then Get-LabConfig)
-    ├── ps.ps1                               # PowerShell execution wrapper
+    ├── get-lab-config.ps1                      # Loads lab-config.json (dot-source, then Get-LabConfig)
+    ├── invoke-vagrant-script.ps1               # PowerShell execution wrapper
     ├── ad/
-    │   ├── install-forest.ps1               # Forest and root domain setup
-    │   ├── join-domain.ps1                  # Domain join automation
-    │   ├── create-ad-objects.ps1            # OU, user, and group creation
-    │   ├── install-laps-schema.ps1          # LAPS schema extension (official AdmPwd.PS module)
-    │   ├── configure-attack-paths.ps1       # ACL chains, Kerberoast, AS-REP, GMSA
-    │   └── configure-machine-attacks.ps1    # Delegation, RBCD, LAPS password (runs on SVR1)
+    │   ├── install-forest.ps1                  # Forest and root domain setup
+    │   ├── join-domain.ps1                     # Domain join automation
+    │   ├── create-ad-objects.ps1               # OU, user, and group creation
+    │   ├── install-laps-schema.ps1             # LAPS schema extension (official AdmPwd.PS module)
+    │   ├── configure-attack-paths.ps1          # ACL chains, Kerberoast, AS-REP, GMSA
+    │   └── configure-machine-attacks.ps1       # Delegation, RBCD, LAPS password (runs on SRV01)
     ├── networking/
-    │   └── configure-network.ps1            # All networking (Policy/MemberDns/RootDcDns/NatInternetDns)
+    │   └── configure-network.ps1               # All networking (Policy/MemberDns/RootDcDns/NatInternetDns)
     ├── windows/
-    │   └── provision-base.ps1               # Base OS configuration
+    │   └── provision-base.ps1                  # Base OS configuration
     ├── tools/
-    │   ├── anonBind.ps1                     # LDAP anonymous bind (dSHeuristics) - wired into RootDC
-    │   └── null-session.ps1                 # SMB null-session enumeration - wired into RootDC
+    │   ├── enable-anonymous-bind.ps1           # LDAP anonymous bind (dSHeuristics) - wired into the root DC
+    │   └── enable-null-session.ps1             # SMB null-session enumeration - wired into the root DC
     └── services/
         ├── ADCS/
-        │   ├── install-adcs.ps1             # CA install + ESC1-4 template deployment
-        │   ├── configure-esc678.ps1         # CA-level ESC5-8 misconfigurations
+        │   ├── install-adcs.ps1                # CA install + ESC1-4 template deployment
+        │   ├── configure-esc678.ps1            # CA-level ESC5-8 misconfigurations
         │   ├── ESC[1-5]_VulnerableTemplate.json
-        │   └── ADCSTemplate/                # Module for managing certificate templates
+        │   └── ADCSTemplate/                   # Module for managing certificate templates
         └── SCCM/
-            ├── installMECM.ps1              # MECM primary site installation
-            ├── installSQL.ps1               # SQL Server 2019
-            ├── installADK.ps1               # Windows ADK
-            ├── installDepRoles.ps1          # IIS, BITS, .NET prerequisites
-            ├── prepareSccmAccounts.ps1      # SCCM service account creation
-            ├── Vuln-NAA-PXE.ps1             # CRED-1: PXE without password
-            ├── Vuln-TS-Variables.ps1        # CRED-2: Task sequence variable exposure
-            ├── Vuln-ClientPush.ps1          # CRED-3: Client push installation
-            └── Vuln-App-Package.ps1         # CRED-4: Anonymous DP looting
+            ├── install-mecm.ps1                # MECM primary site installation
+            ├── install-sql.ps1                 # SQL Server 2019
+            ├── install-adk.ps1                 # Windows ADK
+            ├── install-dep-roles.ps1           # IIS, BITS, .NET prerequisites
+            ├── prepare-sccm-accounts.ps1       # SCCM service account creation
+            ├── configure-vuln-pxe.ps1          # CRED-1: PXE without password
+            ├── configure-vuln-ts-variables.ps1 # CRED-2: Task sequence variable exposure
+            ├── configure-vuln-client-push.ps1  # CRED-3: Client push installation
+            └── configure-vuln-app-package.ps1  # CRED-4: Anonymous DP looting
 ```
+
+> **External tooling (git-ignored, fetched separately):** `sharedscripts/vulns/`
+> (BadBlood, ADModule, PingCastle, RpcView, MisconfigurationManager) and the SCCM install
+> media under `sharedscripts/services/SCCM/MECM_Setup/Media/` are intentionally **not tracked**.
+> A fresh clone will not contain them - stage them out-of-band before provisioning.
 
 ---
 
@@ -267,9 +277,9 @@ SilentRUN-Lab/
 | **Phase 2** | MECM and SQL integration | Completed |
 | **Phase 3** | SCCM vulnerability injection (PXE / NAA / Client Push / DP) | Completed |
 | **Phase 4** | AD attack paths (ACL chains, Kerberoast, AS-REP, delegation, LAPS) | Completed |
-| **Phase 5** | ESC5-ESC8, SVR1 member server, 50+ realistic users | Completed |
+| **Phase 5** | ESC5-ESC8, SRV01 member server, 50+ realistic users | Completed |
 | **Phase 6** | Lab automation (start-lab.ps1, verify-lab.ps1) | Completed |
-| **Phase 7** | Child domain / trust exploitation | Upcoming |
+| **Phase 7** | Standalone MSSQL (SQL01) + child domain (HQ-DC) / trust exploitation | Upcoming |
 | **Phase 8** | Workstation node + detection layer (Sysmon) | Upcoming |
 
 ---
