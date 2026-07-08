@@ -26,21 +26,17 @@ catch {
     Write-Warning "Could not start wuauserv."
 }
 
-# 3. Connectivity Test
-Write-Host "Testing Internet Connection..." -NoNewline
-try {
-    $test = Test-Connection "google.com" -Count 1 -Quiet
-    if ($test) { 
-        Write-Host " [SUCCESS]" -ForegroundColor Green 
-    }
-    else {
-        Write-Error " [FAIL] No Internet Access. Check VirtualBox NAT."
-        exit 1
-    }
+# 3. Connectivity Test - probe the actual ADK download host over HTTPS (TCP 443).
+# NB VirtualBox NAT commonly drops guest ICMP echo while passing TCP fine, so an ICMP
+# ping is a false negative here. ADK downloads over HTTPS, so gate on TCP 443 instead.
+Write-Host "Testing Internet Connection (HTTPS to go.microsoft.com)..." -NoNewline
+$online = Test-NetConnection -ComputerName "go.microsoft.com" -Port 443 -InformationLevel Quiet -WarningAction SilentlyContinue
+if ($online) {
+    Write-Host " [SUCCESS]" -ForegroundColor Green
 }
-catch {
+else {
     Stop-PhaseTimer -Status Failed
-    Write-Error " [FAIL] Connectivity check failed."
+    Write-Error " [FAIL] No HTTPS access to go.microsoft.com:443. Check host internet / VPN / VirtualBox NAT."
     exit 1
 }
 Stop-PhaseTimer -Status Success
