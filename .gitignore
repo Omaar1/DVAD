@@ -41,11 +41,11 @@ Desktop.ini
 .claude/
 
 # DeploymentConfigTemplate.xml is now tracked normally (no repo-wide *.xml ignore).
-!sharedscripts/services/SCCM/extendSchema/*.dll
+!provisioners/services/SCCM/extendSchema/*.dll
 
 # .NET 3.5 is installed fully offline by install-dep-roles.ps1 from a pre-staged
 # NetFx3 source. Ignore anything else dropped into the sxs folder, but DO ship the
 # two NetFx3 cabs so a fresh clone can install .NET 3.5 without internet/Windows Update.
-sharedscripts/services/SCCM/sxs/*
-!sharedscripts/services/SCCM/sxs/microsoft-windows-netfx3-ondemand-package~31bf3856ad364e35~amd64~~.cab
-!sharedscripts/services/SCCM/sxs/Microsoft-Windows-NetFx3-OnDemand-Package~31bf3856ad364e35~amd64~en-US~.cab
+provisioners/services/SCCM/sxs/*
+!provisioners/services/SCCM/sxs/microsoft-windows-netfx3-ondemand-package~31bf3856ad364e35~amd64~~.cab
+!provisioners/services/SCCM/sxs/Microsoft-Windows-NetFx3-OnDemand-Package~31bf3856ad364e35~amd64~en-US~.cab

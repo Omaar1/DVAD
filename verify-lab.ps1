@@ -2,7 +2,7 @@
 # Post-provisioning health check for DVAD.
 # Tests IP reachability, WinRM connectivity, and key service status.
 
-. "$PSScriptRoot\sharedscripts\get-lab-config.ps1"
+. "$PSScriptRoot\provisioners\get-lab-config.ps1"
 $cfg = Get-LabConfig
 
 $vms = @(

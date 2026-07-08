@@ -14,9 +14,9 @@ param([string]$Root = (Split-Path -Parent $PSScriptRoot))
 $ErrorActionPreference = 'Stop'
 
 $excluded = @(
-    '\sharedscripts\vulns\',
-    '\sharedscripts\services\ADCS\ADCSTemplate\',
-    '\sharedscripts\services\SCCM\MECM_Setup\'
+    '\provisioners\vulns\',
+    '\provisioners\services\ADCS\ADCSTemplate\',
+    '\provisioners\services\SCCM\MECM_Setup\'
 )
 
 $kebab = '^[a-z0-9]+(-[a-z0-9]+)*\.(ps1|psm1)$'

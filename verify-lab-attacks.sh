@@ -21,7 +21,7 @@
 set -u
 
 # ----------------------------------------------------------------------------
-# Lab defaults (from provision/variables/lab-config.json + lab-users.json)
+# Lab defaults (from inventory/lab-config.json + lab-users.json)
 # ----------------------------------------------------------------------------
 DOMAIN="silent.run"
 DC_IP="10.10.10.100"

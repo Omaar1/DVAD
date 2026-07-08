@@ -23,7 +23,7 @@ if (-not $isAdmin) {
 }
 
 # Single source of truth for hostnames, IPs, box, and resources.
-. "$PSScriptRoot\sharedscripts\get-lab-config.ps1"
+. "$PSScriptRoot\provisioners\get-lab-config.ps1"
 $cfg = Get-LabConfig
 
 Write-Host ""

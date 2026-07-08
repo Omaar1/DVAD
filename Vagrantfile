@@ -2,10 +2,20 @@
 
 require 'json'
 
+# Emit the standard shell provisioner: run <script> (plus optional space-separated args)
+# through the invoke-vagrant-script.ps1 wrapper, which supplies the Stop/trap/Exit-1
+# contract so a failed step actually halts provisioning. Pass reboot: true to append a reboot.
+def phase(config, script, args = "", reboot: false)
+  config.vm.provision "shell",
+    path: "provisioners/invoke-vagrant-script.ps1",
+    args: "#{script} #{args}".strip
+  config.vm.provision "shell", reboot: true if reboot
+end
+
 # Single source of truth: all hostnames, IPs, box, and resources come from
-# provision/variables/lab-config.json (the PowerShell scripts read the same file
+# inventory/lab-config.json (the PowerShell scripts read the same file
 # via get-lab-config.ps1). Edit the JSON, not this file, to retune the lab.
-cfg = JSON.parse(File.read(File.join(File.dirname(__FILE__), 'provision', 'variables', 'lab-config.json')))
+cfg = JSON.parse(File.read(File.join(File.dirname(__FILE__), 'inventory', 'lab-config.json')))
 
 box_name    = cfg['box']['name']
 box_version = cfg['box']['version']
@@ -52,48 +62,45 @@ Vagrant.configure("2") do |cfg_vm|
         :ip => rootdc['ip']
 
       # Configure keyboard/language/timezone etc.
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/windows/provision-base.ps1"
-      # config.vm.provision "shell", reboot: true
+      phase config, "provisioners/host/prepare-host.ps1"
       # Disable License service to prevent machines from automatic shutdown.
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/windows/disable-license-service.ps1"
-      config.vm.provision "shell", reboot: true
+      phase config, "provisioners/host/disable-license-service.ps1", reboot: true
 
 
       # # # # Create forest root
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/install-forest.ps1"
-      config.vm.provision "shell", reboot: true
+      phase config, "provisioners/domain/deploy-forest.ps1", reboot: true
 
       # Configure the Root DC DNS server now that the forest (and its zones) exist.
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/networking/configure-network.ps1 RootDcDns"
+      phase config, "provisioners/net/configure-network.ps1", "RootDcDns"
 
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/create-ad-objects.ps1 lab-users.json"
+      phase config, "provisioners/domain/seed-directory.ps1", "lab-users.json"
 
       # Extend the AD schema with the legacy LAPS attributes (official AdmPwd.PS
       # module). Runs on the schema master; SVR1's ms-Mcs-AdmPwd value is planted
       # later by configure-machine-attacks.ps1 once SVR1 has joined.
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/install-laps-schema.ps1"
+      phase config, "provisioners/domain/install-laps-schema.ps1"
 
       # Anonymous LDAP bind + Account Operators SDProp-exclusion (dSHeuristics) and the
       # ANONYMOUS LOGON read grant must run BEFORE attack-path ACEs are written, so the
       # Ch2 GenericWrite ACE on r.chen (an Account Operators member) survives SDProp.
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/tools/enable-anonymous-bind.ps1"
+      phase config, "provisioners/tools/enable-anonymous-bind.ps1"
 
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/configure-attack-paths.ps1"
+      phase config, "provisioners/domain/configure-attack-paths.ps1"
 
       # Pre-stage SVR1$/ADCS$ computer accounts and apply Chain 6/7 (delegation, RBCD,
       # LAPS) up front. The real machines join later and reuse these accounts; the ACEs
       # and attributes survive the join (server1 only re-asserts SVR1's delegation flag).
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/prestage-machine-attacks.ps1"
+      phase config, "provisioners/domain/prestage-machine-attacks.ps1"
 
       # Chain 3 (GPP cpassword in SYSVOL) and Chain 4 (GPO abuse: Project-Phoenix gets
       # edit on a DC-linked GPO). Both create GPOs / write SYSVOL, so they run after the
       # AD objects and ACEs exist.
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/configure-chain3-gpp.ps1"
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/configure-chain4-gpo.ps1"
+      phase config, "provisioners/domain/configure-chain3-gpp.ps1"
+      phase config, "provisioners/domain/configure-chain4-gpo.ps1"
 
       # SMB null-session enumeration. Applied before the final reboot so the LSA/SMB
       # registry changes take effect.
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/tools/enable-null-session.ps1"
+      phase config, "provisioners/tools/enable-null-session.ps1"
 
       # Final reboot to settle configuration
       config.vm.provision "shell", reboot: true
@@ -132,22 +139,20 @@ Vagrant.configure("2") do |cfg_vm|
       config.vm.provision "windows-sysprep"
       config.vm.provision "shell", reboot: true
       # Configure keyboard/language/timezone etc.
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/windows/provision-base.ps1"
+      phase config, "provisioners/host/prepare-host.ps1"
 
       # Disable License service to prevent machines from automatic shutdown.
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/windows/disable-license-service.ps1"
+      phase config, "provisioners/host/disable-license-service.ps1"
 
       # # # Configure DNS
       #Join the domain specified in provided variables file - Only do this after everything else has been installed
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/join-domain.ps1"
-      config.vm.provision "shell", reboot: true
+      phase config, "provisioners/domain/add-to-domain.ps1", reboot: true
 
       # Install ActiveDirectory Certificate Services (ESC1-ESC8 vulnerable templates).
       # No reboot here - the MemberDns step needs none, so one reboot covers both.
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/services/ADCS/install-adcs.ps1"
+      phase config, "provisioners/services/ADCS/install-adcs.ps1"
 
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/networking/configure-network.ps1 MemberDns"
-      config.vm.provision "shell", reboot: true
+      phase config, "provisioners/net/configure-network.ps1", "MemberDns", reboot: true
 
 
     end
@@ -190,34 +195,32 @@ Vagrant.configure("2") do |cfg_vm|
       config.vm.provision "shell", reboot: true
 
       # Configure regional settings: keyboard layout, language, timezone
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/windows/provision-base.ps1"
+      phase config, "provisioners/host/prepare-host.ps1"
 
       # Disable Windows license service to prevent automatic VM shutdown after 180 days
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/windows/disable-license-service.ps1"
+      phase config, "provisioners/host/disable-license-service.ps1"
 
       # ========================================================================
       # PHASE 2: DOMAIN JOIN
       # ========================================================================
 
       # Join the SCCM server to the domain (credentials come from lab-config.json)
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/join-domain.ps1"
-      config.vm.provision "shell", reboot: true
+      phase config, "provisioners/domain/add-to-domain.ps1", reboot: true
 
       # ========================================================================
       # PHASE 3: SCCM PREREQUISITES
       # ========================================================================
 
       # Create required AD accounts for SCCM: sccm_admin, sccm_naa, sccm_cp, sccm_dj
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/services/SCCM/prepare-sccm-accounts.ps1"
+      phase config, "provisioners/services/SCCM/prepare-sccm-accounts.ps1"
 
       # Install Windows Server roles/features required by SCCM:
       # - IIS, BITS, RDC, .NET Framework 3.5, Remote Differential Compression
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/services/SCCM/install-dep-roles.ps1"
+      phase config, "provisioners/services/SCCM/install-dep-roles.ps1"
 
       # Install Windows Assessment and Deployment Kit (ADK):
       # - Required for OS deployment, boot images, and USMT
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/services/SCCM/install-adk.ps1"
-      config.vm.provision "shell", reboot: true
+      phase config, "provisioners/services/SCCM/install-adk.ps1", reboot: true
 
       # ========================================================================
       # PHASE 4: SQL SERVER INSTALLATION
@@ -225,8 +228,7 @@ Vagrant.configure("2") do |cfg_vm|
 
       # Install SQL Server 2019 with SCCM-compatible configuration:
       # - Mixed mode authentication, required collation, memory settings
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/services/SCCM/install-sql.ps1"
-      config.vm.provision "shell", reboot: true
+      phase config, "provisioners/services/SCCM/install-sql.ps1", reboot: true
 
       # ========================================================================
       # PHASE 5: MECM (SCCM) INSTALLATION
@@ -235,13 +237,12 @@ Vagrant.configure("2") do |cfg_vm|
       # Install Microsoft Endpoint Configuration Manager (MECM/SCCM):
       # - Primary site installation with site code PS1
       # - Configures Management Point, Distribution Point, and other roles
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/services/SCCM/install-mecm.ps1"
+      phase config, "provisioners/services/SCCM/install-mecm.ps1"
 
       # Configure SCCM console permissions and Role-Based Access Control (RBAC):
       # - Adds DVAD\Administrator and DVAD\SCCMAdmin to SMS Admins group
       # - Grants Full Administrator role in SCCM
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/services/SCCM/repair-sccm-permissions.ps1"
-      config.vm.provision "shell", reboot: true
+      phase config, "provisioners/services/SCCM/repair-sccm-permissions.ps1", reboot: true
 
       # ========================================================================
       # PHASE 6: VULNERABLE CONFIGURATION (CRED-1 ATTACK PATH)
@@ -254,13 +255,13 @@ Vagrant.configure("2") do |cfg_vm|
       # The four configure-vuln-* scripts below are pure SCCM-console operations (boundaries, TS,
       # client push, package). They need no reboot between them; the site stays up and
       # each reconnects to the provider on its own.
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/services/SCCM/configure-vuln-pxe.ps1"
+      phase config, "provisioners/services/SCCM/configure-vuln-pxe.ps1"
 
       # ========================================================================
       # PHASE 7: VULNERABLE CONFIGURATION (CRED-2 ATTACK PATH)
       # ========================================================================
       # - Deploys task sequence to All Systems collection
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/services/SCCM/configure-vuln-ts-variables.ps1"
+      phase config, "provisioners/services/SCCM/configure-vuln-ts-variables.ps1"
 
       # ========================================================================
       # PHASE 8: VULNERABLE CLIENT PUSH Installation
@@ -270,18 +271,16 @@ Vagrant.configure("2") do |cfg_vm|
       # - Enables client push installation
       # - Configures client push for all systems
       # - Adds DVAD\sccm_cpia to client push account
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/services/SCCM/configure-vuln-client-push.ps1"
+      phase config, "provisioners/services/SCCM/configure-vuln-client-push.ps1"
 
       # ========================================================================
       # PHASE 9: VULNERABLE DISTRIBUTION POINT (Anon DP LOOTING)
       # ========================================================================
       # - Deploys a vulnerable package to All Systems collection
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/services/SCCM/configure-vuln-app-package.ps1"
-      # config.vm.provision "shell", reboot: true
+      phase config, "provisioners/services/SCCM/configure-vuln-app-package.ps1"
 
       # configure network
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/networking/configure-network.ps1 MemberDns"
-      config.vm.provision "shell", reboot: true
+      phase config, "provisioners/net/configure-network.ps1", "MemberDns", reboot: true
 
 
     end
@@ -325,20 +324,17 @@ Vagrant.configure("2") do |cfg_vm|
   #     config.vm.provision "shell", reboot: true
 
   #     # Configure keyboard/language/timezone/Firewall etc.
-  #     config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/windows/provision-base.ps1"
+  #     phase config, "provisioners/host/prepare-host.ps1"
 
   #     # Disable License service to prevent machines from automatic shutdown.
-  #     config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/windows/disable-license-service.ps1"
-  #     config.vm.provision "shell", reboot: true
+  #     phase config, "provisioners/host/disable-license-service.ps1", reboot: true
 
 
   #     # Create child domain
-  #     config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/install-domain.ps1"
-  #     config.vm.provision "shell", reboot: true
+  #     phase config, "provisioners/domain/deploy-child-domain.ps1", reboot: true
 
   #     # Configure DNS
-  #     config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/networking/configure-network.ps1 MemberDns"
-  #     config.vm.provision "shell", reboot: true
+  #     phase config, "provisioners/net/configure-network.ps1", "MemberDns", reboot: true
   # end
 
 
@@ -375,24 +371,21 @@ Vagrant.configure("2") do |cfg_vm|
       config.vm.provision "shell", reboot: true
 
       # Configure regional settings
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/windows/provision-base.ps1"
+      phase config, "provisioners/host/prepare-host.ps1"
 
       # Disable License service
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/windows/disable-license-service.ps1"
+      phase config, "provisioners/host/disable-license-service.ps1"
 
-      # Join the domain (provision-base + disable-license need no reboot first; one
+      # Join the domain (prepare-host + disable-license need no reboot first; one
       # reboot here applies the SID/regional/license changes together, like ADCS)
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/join-domain.ps1"
-      config.vm.provision "shell", reboot: true
+      phase config, "provisioners/domain/add-to-domain.ps1", reboot: true
 
       # Configure DNS
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/networking/configure-network.ps1 MemberDns"
-      config.vm.provision "shell", reboot: true
+      phase config, "provisioners/net/configure-network.ps1", "MemberDns", reboot: true
 
       # Apply machine-dependent attack paths (delegation, LAPS, RBCD)
       # Runs last because it needs SRV01 and CA01 computer objects to exist in AD
-      config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/configure-machine-attacks.ps1"
-      config.vm.provision "shell", reboot: true
+      phase config, "provisioners/domain/configure-machine-attacks.ps1", reboot: true
 
     end
 
@@ -433,18 +426,16 @@ Vagrant.configure("2") do |cfg_vm|
     #   config.vm.provision "shell", reboot: true
     #
     #   # Configure regional settings + disable license service
-    #   config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/windows/provision-base.ps1"
-    #   config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/windows/disable-license-service.ps1"
+    #   phase config, "provisioners/host/prepare-host.ps1"
+    #   phase config, "provisioners/host/disable-license-service.ps1"
     #
     #   # Join the domain
-    #   config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/ad/join-domain.ps1"
-    #   config.vm.provision "shell", reboot: true
+    #   phase config, "provisioners/domain/add-to-domain.ps1", reboot: true
     #
     #   # Configure DNS
-    #   config.vm.provision "shell", path: "sharedscripts/invoke-vagrant-script.ps1", args: "sharedscripts/networking/configure-network.ps1 MemberDns"
-    #   config.vm.provision "shell", reboot: true
+    #   phase config, "provisioners/net/configure-network.ps1", "MemberDns", reboot: true
     #
-    #   # TODO: install SQL Server (see sharedscripts/services/SCCM/install-sql.ps1 for a reference)
+    #   # TODO: install SQL Server (see provisioners/services/SCCM/install-sql.ps1 for a reference)
     # end
 
 end

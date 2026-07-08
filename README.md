@@ -176,7 +176,7 @@ Or use the ordered startup helper (recommended for first-time provisioning):
 
 Provisioning takes **60-90+ minutes** depending on disk I/O and internet speed.
 
-> **Tip:** To avoid a large download during provisioning, manually place `MEM_Configmgr_Eval.exe` (~1.2 GB) in `sharedscripts/services/SCCM/MECM_Setup/` before running `vagrant up`.
+> **Tip:** To avoid a large download during provisioning, manually place `MEM_Configmgr_Eval.exe` (~1.2 GB) in `provisioners/services/SCCM/MECM_Setup/` before running `vagrant up`.
 
 ### Verify
 
@@ -223,24 +223,23 @@ DVAD/
 ├── start-lab.ps1                               # Ordered VM startup helper
 ├── verify-lab.ps1                              # Post-deploy health check
 ├── DVAD_Lab_Guide.md                           # Detailed lab notes and attack context
-├── provision/
-│   └── variables/
-│       ├── lab-config.json                     # Single source of truth: domain, hosts/IPs, box, SCCM settings
-│       └── lab-users.json                      # OUs, groups, departmental users + service accounts
-└── sharedscripts/
+├── inventory/
+│   ├── lab-config.json                         # Single source of truth: domain, hosts/IPs, box, SCCM settings
+│   └── lab-users.json                          # OUs, groups, departmental users + service accounts
+└── provisioners/
     ├── get-lab-config.ps1                      # Loads lab-config.json (dot-source, then Get-LabConfig)
     ├── invoke-vagrant-script.ps1               # PowerShell execution wrapper
-    ├── ad/
-    │   ├── install-forest.ps1                  # Forest and root domain setup
-    │   ├── join-domain.ps1                     # Domain join automation
-    │   ├── create-ad-objects.ps1               # OU, user, and group creation
+    ├── domain/
+    │   ├── deploy-forest.ps1                   # Forest and root domain setup
+    │   ├── add-to-domain.ps1                   # Domain join automation
+    │   ├── seed-directory.ps1                  # OU, user, and group creation
     │   ├── install-laps-schema.ps1             # LAPS schema extension (official AdmPwd.PS module)
     │   ├── configure-attack-paths.ps1          # ACL chains, Kerberoast, AS-REP, GMSA
     │   └── configure-machine-attacks.ps1       # Delegation, RBCD, LAPS password (runs on SRV01)
-    ├── networking/
+    ├── net/
     │   └── configure-network.ps1               # All networking (Policy/MemberDns/RootDcDns/NatInternetDns)
-    ├── windows/
-    │   └── provision-base.ps1                  # Base OS configuration
+    ├── host/
+    │   └── prepare-host.ps1                    # Base OS configuration
     ├── tools/
     │   ├── enable-anonymous-bind.ps1           # LDAP anonymous bind (dSHeuristics) - wired into the root DC
     │   └── enable-null-session.ps1             # SMB null-session enumeration - wired into the root DC
@@ -262,9 +261,9 @@ DVAD/
             └── configure-vuln-app-package.ps1  # CRED-4: Anonymous DP looting
 ```
 
-> **External tooling (git-ignored, fetched separately):** `sharedscripts/vulns/`
+> **External tooling (git-ignored, fetched separately):** `provisioners/vulns/`
 > (BadBlood, ADModule, PingCastle, RpcView, MisconfigurationManager) and the SCCM install
-> media under `sharedscripts/services/SCCM/MECM_Setup/Media/` are intentionally **not tracked**.
+> media under `provisioners/services/SCCM/MECM_Setup/Media/` are intentionally **not tracked**.
 > A fresh clone will not contain them - stage them out-of-band before provisioning.
 
 ---
@@ -290,7 +289,7 @@ DVAD/
 
 **Provisioning time** — Full provisioning spans 60-90+ minutes. The SCCM VM alone takes 40+ minutes to install SQL Server, ADK, and MECM. The `boot_timeout = 900` setting prevents WinRM drops during long installations.
 
-**MECM installer** — The 1.2 GB `MEM_Configmgr_Eval.exe` is downloaded during provisioning if not pre-staged. Pre-staging it in `sharedscripts/services/SCCM/MECM_Setup/` saves significant time on slow connections.
+**MECM installer** — The 1.2 GB `MEM_Configmgr_Eval.exe` is downloaded during provisioning if not pre-staged. Pre-staging it in `provisioners/services/SCCM/MECM_Setup/` saves significant time on slow connections.
 
 ---
 

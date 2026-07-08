@@ -8,14 +8,14 @@
 Import-Module ActiveDirectory
 Import-Module GroupPolicy -ErrorAction SilentlyContinue
 
-. "$PSScriptRoot\sharedscripts\get-lab-config.ps1"
+. "$PSScriptRoot\provisioners\get-lab-config.ps1"
 $cfg      = Get-LabConfig
 $svr1Name = $cfg.hosts.svr1.name
 $adcsName = $cfg.hosts.adcs.name
 
 $dn      = (Get-ADDomain).DistinguishedName
 $dnsRoot = (Get-ADDomain).DNSRoot
-$usersJson = "C:\vagrant\provision\variables\lab-users.json"
+$usersJson = "C:\vagrant\inventory\lab-users.json"
 $PASS = 0; $FAIL = 0; $SKIP = 0
 
 function ok([string]$m)  { $script:PASS++; Write-Host "  [PASS] $m" -ForegroundColor Green }

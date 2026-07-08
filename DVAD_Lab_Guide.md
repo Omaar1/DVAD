@@ -39,7 +39,7 @@ Host requirement: 16 GB RAM minimum, 32 GB recommended.
 
 **Note on large downloads:**
 - MECM (SCCM) installer: ~1.2 GB — auto-downloaded during provisioning.
-  Pre-stage `MEM_Configmgr_Eval.exe` in `sharedscripts/services/SCCM/MECM_Setup/` to skip download.
+  Pre-stage `MEM_Configmgr_Eval.exe` in `provisioners/services/SCCM/MECM_Setup/` to skip download.
 - SQL Server 2019: downloaded by `install-sql.ps1` if not cached.
 
 ---
@@ -88,23 +88,23 @@ vagrant destroy -f      # Destroy all VMs (clean slate)
 - **Vulnerability**: PXE boot enabled without password protection.
 - **Attack**: Boot unknown machine from network. Retrieve `variables.dat` via TFTP.
 - **Credential exposed**: `DVAD\sccm_naa`
-- **Script**: `sharedscripts/services/SCCM/configure-vuln-pxe.ps1`
+- **Script**: `provisioners/services/SCCM/configure-vuln-pxe.ps1`
 
 ### CRED-2: Task Sequence Variable Exposure
 - **Vulnerability**: Task sequence deployed to All Systems with embedded credentials.
 - **Attack**: Request policy as a registered machine. Extract OSD secrets.
 - **Credentials**: `DVAD\sccm_dja` (Domain Join), `AWS_Migration_Secret` (custom variable)
-- **Script**: `sharedscripts/services/SCCM/configure-vuln-ts-variables.ps1`
+- **Script**: `provisioners/services/SCCM/configure-vuln-ts-variables.ps1`
 
 ### CRED-3: Client Push NTLM Coercion
 - **Vulnerability**: Client push enabled with `DVAD\sccm_cpia` account.
 - **Attack**: Control a machine being pushed to; relay NTLM auth or dump via LSASS.
-- **Script**: `sharedscripts/services/SCCM/configure-vuln-client-push.ps1`
+- **Script**: `provisioners/services/SCCM/configure-vuln-client-push.ps1`
 
 ### CRED-4: Anonymous Distribution Point Looting
 - **Vulnerability**: Package on DP with hardcoded credentials.
 - **Attack**: Anonymous access to DP; download packages containing secrets.
-- **Script**: `sharedscripts/services/SCCM/configure-vuln-app-package.ps1`
+- **Script**: `provisioners/services/SCCM/configure-vuln-app-package.ps1`
 
 ---
 
