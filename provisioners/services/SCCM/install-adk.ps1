@@ -1,7 +1,7 @@
 # Install-ADK.ps1 (Online Version + Network Setup)
 # ---------------------------------------------------
 # 1. Configures Network for Internet Access
-# 2. Downloads and Installs ADK + WinPE (Version 2004)
+# 2. Downloads and Installs ADK + WinPE (ADK 10.1.26100.2454, Dec 2024 - matches ConfigMgr 2403)
 # 3. Verifies Installation
 
 $ErrorActionPreference = "Stop"
@@ -44,7 +44,9 @@ Stop-PhaseTimer -Status Success
 # --- PART 2: ADK INSTALLATION ---
 Start-PhaseTimer -PhaseName "ADK CORE INSTALLATION"
 
-$DownloadDir = "C:\vagrant\provisioners\services\SCCM\ADK"
+# Guest-local dir (NOT the synced repo folder): keeps binaries out of git and forces a
+# fresh download of the current bootstrapper instead of reusing a stale committed one.
+$DownloadDir = "C:\ADK-Setup"
 $LogPathADK = "C:\ADKinstallerLog.txt"
 $LogPathWinPE = "C:\winPEADKinstallerLog.txt"
 
@@ -52,9 +54,12 @@ $LogPathWinPE = "C:\winPEADKinstallerLog.txt"
 $ADKFeatures = 'OptionId.DeploymentTools', 'OptionId.ImagingAndConfigurationDesigner', 'OptionId.ICDConfigurationDesigner', 'OptionId.UserStateMigrationTool'
 $WinPEFeature = 'OptionId.WindowsPreinstallationEnvironment'
 
-# URLs for ADK 2004 (Best compatibility for Server 2019)
-$UrlADK = "https://go.microsoft.com/fwlink/?linkid=2120254"
-$UrlWinPE = "https://go.microsoft.com/fwlink/?linkid=2120253"
+# Current, Microsoft-maintained ADK download links (version-stable fwlinks), pinned to
+# ADK 10.1.26100.2454 (Dec 2024): supported by ConfigMgr 2403 and still hosted by MS.
+# NB do NOT commit a bootstrapper to the repo - old ones embed a component-download root
+# that Microsoft eventually deletes (as happened to ADK 2004), silently breaking clones.
+$UrlADK = "https://go.microsoft.com/fwlink/?linkid=2289980"
+$UrlWinPE = "https://go.microsoft.com/fwlink/?linkid=2289981"
 
 # Ensure download directory exists
 if (-not (Test-Path $DownloadDir)) { New-Item -Path $DownloadDir -ItemType Directory | Out-Null }
@@ -108,9 +113,12 @@ else {
     }
     else {
         Stop-PhaseTimer -Status Failed
+        # Print the log tail BEFORE Write-Error: under $ErrorActionPreference='Stop' a
+        # Write-Error terminates immediately, so anything after it never runs.
+        Write-Host "--- ADK LOG TAIL (last 20) ---" -ForegroundColor Red
+        Get-Content $LogPathADK -Tail 20 -ErrorAction SilentlyContinue
+        Write-Host "--- end log ---" -ForegroundColor Red
         Write-Error "ADK Install Failed. Exit Code: $($proc.ExitCode)"
-        Write-Host "--- LOG TAIL ---" -ForegroundColor Red
-        Get-Content $LogPathADK -Tail 15
         exit 1
     }
 }
@@ -145,9 +153,10 @@ else {
     }
     else {
         Stop-PhaseTimer -Status Failed
+        Write-Host "--- WinPE LOG TAIL (last 20) ---" -ForegroundColor Red
+        Get-Content $LogPathWinPE -Tail 20 -ErrorAction SilentlyContinue
+        Write-Host "--- end log ---" -ForegroundColor Red
         Write-Error "WinPE Install Failed. Exit Code: $($procPE.ExitCode)"
-        Write-Host "--- LOG TAIL ---" -ForegroundColor Red
-        Get-Content $LogPathWinPE -Tail 15
         exit 1
     }
 }
