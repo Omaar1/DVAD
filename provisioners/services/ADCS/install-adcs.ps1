@@ -143,6 +143,7 @@ $templates = @(
     @{DisplayName = "ESC1_VulnerableTemplate"; JsonPath = "C:\vagrant\provisioners\services\ADCS\ESC1_VulnerableTemplate.json"},
     @{DisplayName = "ESC2_VulnerableTemplate"; JsonPath = "C:\vagrant\provisioners\services\ADCS\ESC2_VulnerableTemplate.json"},
     @{DisplayName = "ESC3_VulnerableTemplate"; JsonPath = "C:\vagrant\provisioners\services\ADCS\ESC3_VulnerableTemplate.json"},
+    @{DisplayName = "ESC3_EnrollmentAgent"; JsonPath = "C:\vagrant\provisioners\services\ADCS\ESC3_EnrollmentAgentTemplate.json"},
     @{DisplayName = "ESC4_VulnerableTemplate"; JsonPath = "C:\vagrant\provisioners\services\ADCS\ESC4_VulnerableTemplate.json"}
 )
 
@@ -157,6 +158,24 @@ foreach ($template in $templates) {
     Write-Host "[*] Setting ACLs for '$($template.DisplayName)'..."
     Set-ADCSTemplateACL -DisplayName $template.DisplayName -Identity "$netbios\Domain Users" -Type Allow -Enroll -AutoEnroll -ErrorAction Stop
 }
+
+# ESC4: Enroll rights alone are NOT ESC4. ESC4 requires a low-priv principal to hold
+# WRITE control over the template object so it can be reconfigured (add
+# ENROLLEE_SUPPLIES_SUBJECT / client-auth EKU / drop approval) and then abused.
+# Set-ADCSTemplateACL only grants Read/Enroll/AutoEnroll, so grant Domain Users
+# GenericAll directly (same pattern as the ESC5 CA-object ACE). This is what certipy
+# reports as ESC4.
+. C:\vagrant\provisioners\domain\set-ad-ace.ps1
+$esc4Dn   = (Get-ADCSTemplate -DisplayName "ESC4_VulnerableTemplate").DistinguishedName
+$esc4Adsi = [ADSI]"LDAP://$esc4Dn"
+$duSid    = (New-Object System.Security.Principal.NTAccount("$netbios\Domain Users")).Translate([System.Security.Principal.SecurityIdentifier])
+$esc4Ace  = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+    $duSid,
+    [System.DirectoryServices.ActiveDirectoryRights]::GenericAll,
+    [System.Security.AccessControl.AccessControlType]::Allow,
+    [System.DirectoryServices.ActiveDirectorySecurityInheritance]::None)
+Add-AdAceIfMissing -DirectoryEntry $esc4Adsi -Ace $esc4Ace | Out-Null
+Write-Host "[+] ESC4: Domain Users granted GenericAll on ESC4_VulnerableTemplate"
 '@
 
 $tplUser = "$($forest.netbiosName)\Administrator"
