@@ -76,8 +76,8 @@ Vagrant.configure("2") do |cfg_vm|
       phase config, "provisioners/domain/seed-directory.ps1", "lab-users.json"
 
       # Extend the AD schema with the legacy LAPS attributes (official AdmPwd.PS
-      # module). Runs on the schema master; SVR1's ms-Mcs-AdmPwd value is planted
-      # later by configure-machine-attacks.ps1 once SVR1 has joined.
+      # module). Runs on the schema master; SRV01's ms-Mcs-AdmPwd value is planted
+      # later by configure-machine-attacks.ps1 once SRV01 has joined.
       phase config, "provisioners/domain/install-laps-schema.ps1"
 
       # Anonymous LDAP bind + Account Operators SDProp-exclusion (dSHeuristics) and the
@@ -87,9 +87,9 @@ Vagrant.configure("2") do |cfg_vm|
 
       phase config, "provisioners/domain/configure-attack-paths.ps1"
 
-      # Pre-stage SVR1$/ADCS$ computer accounts and apply Chain 6/7 (delegation, RBCD,
+      # Pre-stage SRV01$/ADCS$ computer accounts and apply Chain 6/7 (delegation, RBCD,
       # LAPS) up front. The real machines join later and reuse these accounts; the ACEs
-      # and attributes survive the join (server1 only re-asserts SVR1's delegation flag).
+      # and attributes survive the join (server1 only re-asserts SRV01's delegation flag).
       phase config, "provisioners/domain/prestage-machine-attacks.ps1"
 
       # Chain 3 (GPP cpassword in SYSVOL) and Chain 4 (GPO abuse: Project-Phoenix gets

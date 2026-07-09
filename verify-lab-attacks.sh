@@ -23,19 +23,19 @@ set -u
 # ----------------------------------------------------------------------------
 # Lab defaults (from inventory/lab-config.json + lab-users.json)
 # ----------------------------------------------------------------------------
-DOMAIN="silent.run"
+DOMAIN="dvad.lab"
 DC_IP="10.10.10.100"
 ADCS_IP="10.10.10.103"
 SCCM_IP="10.10.10.104"
-SVR1_IP="10.10.10.150"
-BASE_DN="DC=silent,DC=run"
+SRV01_IP="10.10.10.150"
+BASE_DN="DC=dvad,DC=lab"
 
 # Recon credential - any valid domain user works for enumeration/roasting.
 RECON_USER="a.johnson"
 RECON_PASS='H3lpd3sk#2025!'
 
 # Known service-account SPN we expect to roast.
-SQL_SPN="MSSQLSvc/SVR1.silent.run:1433"
+SQL_SPN="MSSQLSvc/SRV01.dvad.lab:1433"
 
 # ----------------------------------------------------------------------------
 # Arg parsing
@@ -46,7 +46,7 @@ while [ $# -gt 0 ]; do
         --dc-ip)   DC_IP="$2"; shift 2 ;;
         --adcs-ip) ADCS_IP="$2"; shift 2 ;;
         --sccm-ip) SCCM_IP="$2"; shift 2 ;;
-        --svr1-ip) SVR1_IP="$2"; shift 2 ;;
+        --srv01-ip) SRV01_IP="$2"; shift 2 ;;
         --user)    RECON_USER="$2"; shift 2 ;;
         --pass)    RECON_PASS="$2"; shift 2 ;;
         --base-dn) BASE_DN="$2"; shift 2 ;;
@@ -130,7 +130,7 @@ chk_tool "certipy"             "$CERTIPY"
 chk_tool "ldapsearch"          "$LDAPSEARCH"
 chk_tool "curl"                "$CURL"
 chk_tool "nmap (optional)"     "$NMAP"
-info "Target: $DOMAIN  DC=$DC_IP  ADCS=$ADCS_IP  SCCM=$SCCM_IP  SVR1=$SVR1_IP"
+info "Target: $DOMAIN  DC=$DC_IP  ADCS=$ADCS_IP  SCCM=$SCCM_IP  SRV01=$SRV01_IP"
 info "Recon cred: $RECON_USER"
 
 # ============================================================================
@@ -222,10 +222,10 @@ banner "Chain 6: Delegation (Unconstrained / Constrained / RBCD)"
 # ============================================================================
 if [ -n "$FINDDELEG" ]; then
     OUT=$("$FINDDELEG" "$CREDS" -dc-ip "$DC_IP" 2>&1)
-    if printf '%s' "$OUT" | grep -qiE 'SVR1.*Unconstrained|Unconstrained.*SVR1'; then
-        pass "6a Unconstrained delegation on SVR1\$"
+    if printf '%s' "$OUT" | grep -qiE 'SRV01.*Unconstrained|Unconstrained.*SRV01'; then
+        pass "6a Unconstrained delegation on SRV01\$"
     else
-        fail "6a SVR1 unconstrained delegation not found"
+        fail "6a SRV01 unconstrained delegation not found"
     fi
     if printf '%s' "$OUT" | grep -qi 'svc_web'; then
         pass "6b Constrained delegation on svc_web (-> CIFS/ROOTDC)"
@@ -234,7 +234,7 @@ if [ -n "$FINDDELEG" ]; then
         fail "6b svc_web constrained delegation not found"
     fi
     info "findDelegation output:"
-    printf '%s\n' "$OUT" | sed 's/^/         /' | grep -iE 'AccountName|Unconstrained|Constrained|svc_web|SVR1' | head -n 8
+    printf '%s\n' "$OUT" | sed 's/^/         /' | grep -iE 'AccountName|Unconstrained|Constrained|svc_web|SRV01' | head -n 8
 else
     skip "6a/6b delegation (findDelegation not installed)"
 fi
@@ -242,14 +242,14 @@ fi
 check_ace "6c RBCD: GenericWrite l.garcia -> ADCS\$" "l.garcia" "ADCS\$" "GenericWrite|GENERIC_WRITE|WriteProperty|AllowedToAct"
 
 # ============================================================================
-banner "Chain 7: LAPS (t.brown -> SVR1\$ AllExtendedRights)"
+banner "Chain 7: LAPS (t.brown -> SRV01\$ AllExtendedRights)"
 # ============================================================================
-check_ace "AllExtendedRights t.brown -> SVR1\$" "t.brown" "SVR1\$" "All-Extended|AllExtendedRights|ExtendedRight|CONTROL_ACCESS"
+check_ace "AllExtendedRights t.brown -> SRV01\$" "t.brown" "SRV01\$" "All-Extended|AllExtendedRights|ExtendedRight|CONTROL_ACCESS"
 if [ -n "$NXC" ]; then
     OUT=$("$NXC" ldap "$DC_IP" -u "$RECON_USER" -p "$RECON_PASS" -M laps 2>&1)
-    if printf '%s' "$OUT" | grep -qiE 'ms-?Mcs-?AdmPwd|SVR1.*:'; then
-        pass "LAPS attribute (ms-Mcs-AdmPwd) present on SVR1"
-        evidence "$(printf '%s' "$OUT" | grep -iE 'SVR1|AdmPwd' | head -n 1)"
+    if printf '%s' "$OUT" | grep -qiE 'ms-?Mcs-?AdmPwd|SRV01.*:'; then
+        pass "LAPS attribute (ms-Mcs-AdmPwd) present on SRV01"
+        evidence "$(printf '%s' "$OUT" | grep -iE 'SRV01|AdmPwd' | head -n 1)"
     else
         info "LAPS password not readable by $RECON_USER (expected: only authorized readers); attribute presence requires a privileged reader"
     fi
