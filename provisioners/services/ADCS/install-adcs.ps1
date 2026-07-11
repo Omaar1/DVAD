@@ -147,14 +147,37 @@ $templates = @(
     @{DisplayName = "ESC4_VulnerableTemplate"; JsonPath = "C:\vagrant\provisioners\services\ADCS\ESC4_VulnerableTemplate.json"}
 )
 
+# Resolve every Enterprise CA once. Publication must be re-asserted on EVERY run:
+# reinstalling the CA (fresh CA cert) resets its certificateTemplates list, and
+# New-ADCSTemplate only publishes at creation time - so a template that already exists
+# in AD would silently go unpublished on the new CA (certipy shows "Enabled: False").
+$configNC       = (Get-ADRootDSE).configurationNamingContext
+$enrollmentPath = "CN=Enrollment Services,CN=Public Key Services,CN=Services,$configNC"
+$cas            = @(Get-ADObject -SearchBase $enrollmentPath -SearchScope OneLevel -Filter *)
+
 foreach ($template in $templates) {
     $existingTemplate = Get-ADCSTemplate -DisplayName $template.DisplayName -ErrorAction SilentlyContinue
     if ($existingTemplate) {
         Write-Host "[*] Template '$($template.DisplayName)' already exists. Skipping creation."
     } else {
         Write-Host "[*] Creating template '$($template.DisplayName)'..."
-        New-ADCSTemplate -DisplayName $template.DisplayName -JSON (Get-Content $template.JsonPath -Raw) -Publish -ErrorAction Stop
+        New-ADCSTemplate -DisplayName $template.DisplayName -JSON (Get-Content $template.JsonPath -Raw) -ErrorAction Stop
+        $existingTemplate = Get-ADCSTemplate -DisplayName $template.DisplayName -ErrorAction Stop
     }
+
+    # Ensure the template is published to every CA (idempotent, survives CA reinstall).
+    # certificateTemplates stores the template CN, so publish by the object's real name.
+    $cn = $existingTemplate.Name
+    foreach ($ca in $cas) {
+        $published = @((Get-ADObject -Identity $ca.DistinguishedName -Properties certificateTemplates).certificateTemplates)
+        if ($published -notcontains $cn) {
+            Set-ADObject -Identity $ca.DistinguishedName -Add @{certificateTemplates = $cn}
+            Write-Host "[+] Published '$cn' on CA '$($ca.Name)'."
+        } else {
+            Write-Host "[*] '$cn' already published on CA '$($ca.Name)'."
+        }
+    }
+
     Write-Host "[*] Setting ACLs for '$($template.DisplayName)'..."
     Set-ADCSTemplateACL -DisplayName $template.DisplayName -Identity "$netbios\Domain Users" -Type Allow -Enroll -AutoEnroll -ErrorAction Stop
 }
