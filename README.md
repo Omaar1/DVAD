@@ -4,11 +4,44 @@
 ![Language](https://img.shields.io/badge/Automation-PowerShell-5391FE?style=for-the-badge&logo=powershell)
 ![Focus](https://img.shields.io/badge/Focus-AD_/_ADCS_/_SCCM-red?style=for-the-badge)
 
-# Damn Vulnerable Active Directory (DVAD) — AutoAD Attack Range
+# DVAD — Damn Vulnerable Active Directory
 
-> **A zero-touch Infrastructure-as-Code pipeline that deploys a realistic, deliberately vulnerable enterprise Active Directory environment — ready for red team exercises in under an hour.**
+> **A local Active Directory lab for learning AD attacks.** One command builds a deliberately
+> vulnerable `dvad.lab` domain on your own machine, with 22 attack paths already planted. Start
+> small on a laptop, grow into a full enterprise replica when you want to.
 
-Manually building multi-server Windows lab environments for security research takes days and is error-prone. DVAD eliminates that overhead. A single `vagrant up` provisions a fully functional AD forest with a Certificate Authority, SQL Server, MECM/SCCM, and a domain-joined member server — all pre-configured with intentional security misconfigurations that mirror real-world enterprise flaws.
+```powershell
+git clone https://github.com/Omaar1/DVAD.git
+cd DVAD
+.\lab.ps1 up          # builds the default 'core' profile: 2 VMs, 4 GB RAM
+```
+
+Everything else — profiles, verification, snapshots, troubleshooting — is in
+**[INSTALL.md](INSTALL.md)**.
+
+---
+
+## Start small
+
+You do not need a workstation to practise Kerberoasting. Pick the profile that fits your machine:
+
+| Profile | VMs | RAM | Disk | Rough build | What you can practise |
+| --- | --- | --- | --- | --- | --- |
+| **`core`** *(default)* | DVAD-DC, SRV01 | **4 GB** | ~60 GB | ~37 min | **Chains 1–8** — the AD fundamentals |
+| **`adcs`** | + CA01 | 6 GB | ~90 GB | ~52 min | + **ESC1–8** certificate abuse |
+| **`full`** | + CM01 | 14 GB | ~120 GB | ~102 min | + **CRED-1…4** SCCM credential theft |
+
+```powershell
+.\lab.ps1 profiles              # see them with live numbers from your config
+.\lab.ps1 plan -Profile adcs    # dry run: what would be built, in what order
+.\lab.ps1 up   -Profile adcs
+```
+
+`core` is a complete Chains 1–8 experience, not a crippled preview. The `CA01$` computer object is
+pre-staged in the directory even when CA01 itself is not built, so the RBCD path still works.
+
+> Build times are estimates for an SSD, derived from per-VM figures in `lab-config.json`. Your first
+> run also downloads a ~5–6 GB base box.
 
 ---
 
@@ -16,202 +49,168 @@ Manually building multi-server Windows lab environments for security research ta
 
 ```
                     ┌──────────────────────────────┐
-                    │       dvad.lab (Forest)       │
-                    │            DVAD-DC            │
-                    │        10.10.10.100           │
+                    │       dvad.lab (Forest)      │
+                    │            DVAD-DC           │
+                    │        10.10.10.100          │
                     └───────────┬──────────────────┘
                                 │
-         ┌──────────────────────┼──────────────────────┬─────────────────┐
-         │                      │                      │                 │
-┌────────┴────────┐  ┌──────────┴──────┐  ┌───────────┴──────┐ ┌───────┴──────┐
-│   CA01          │  │   CM01 / MECM   │  │   SQL Server      │ │    SRV01     │
-│   Certificate   │  │   Config Mgr    │  │   (co-hosted on   │ │ Member Server│
-│   Authority     │  │   10.10.10.104  │  │    CM01 node)     │ │ 10.10.10.150 │
-│   10.10.10.103  │  └─────────────────┘  └───────────────────┘ └──────────────┘
-└─────────────────┘
+         ┌──────────────────────┼──────────────────────┐
+         │                      │                      │
+┌────────┴────────┐  ┌──────────┴──────┐  ┌───────────┴──────┐
+│   CA01          │  │   CM01 / MECM   │  │   SRV01          │
+│   Enterprise    │  │   Config Mgr    │  │   Member Server  │
+│   Root CA       │  │   + SQL 2019    │  │                  │
+│   10.10.10.103  │  │   10.10.10.104  │  │   10.10.10.150   │
+│   (adcs, full)  │  │   (full)        │  │   (all profiles) │
+└─────────────────┘  └─────────────────┘  └──────────────────┘
 ```
 
-| Machine | IP Address | Role | vCPUs | RAM |
-| --- | --- | --- | --- | --- |
-| **DVAD-DC** | `10.10.10.100` | Forest Root DC / Primary DNS | 2 | 2 GB |
-| **CA01** | `10.10.10.103` | Enterprise Root Certificate Authority | 2 | 2 GB |
-| **CM01** | `10.10.10.104` | Microsoft Endpoint Configuration Manager + SQL | 2 | 8 GB |
-| **SRV01** | `10.10.10.150` | Domain-joined Member Server | 2 | 2 GB |
+Domain: `dvad.lab` (NetBIOS `DVAD`). After the DC is up, the remaining VMs are independent of one
+another, so `-Parallel` can start them together.
 
-**Total lab RAM: ~14 GB** — 16 GB host minimum, 32 GB recommended.
-
-> **Planned (stubbed in `lab-config.json`, not built yet):** `SQL01` (standalone MSSQL,
-> `10.10.10.105`) and `HQ-DC` (child domain `hq.dvad.lab`, `10.10.10.101`). They are
-> defined in config so they can be referenced now and provisioned later without code
-> changes — the current 4-VM lab is fully functional without them.
+> **Defined in config but not built yet:** `SQL01` (standalone MSSQL, `10.10.10.105`) and `HQ-DC`
+> (child domain `hq.dvad.lab`, `10.10.10.101`). `lab.ps1` will tell you they are stubs if you select
+> them.
 
 ---
 
-## Why This Exists
+## Attack-Path Map
 
-Setting up AD, ADCS, SQL, and MECM concurrently is resource-intensive and brittle. Security teams end up spending days on infrastructure instead of practicing attack paths. DVAD solves this with:
+The 22 planted vectors, grouped by service, all converging on domain dominance.
 
-- **Zero-touch provisioning** — Vagrant and PowerShell handle everything from forest creation to vulnerability injection
-- **Offline payload handling** — DISM-based .NET/ADK installation and pre-staged MECM installers keep provisioning reliable on slow or air-gapped networks
-- **Linked Clone optimization** — minimizes disk footprint across multiple heavy Windows VMs
-- **Repeatable and disposable** — spin up, test, destroy, repeat
+<p align="center">
+  <img src="assets/attack-map.svg" alt="DVAD attack-path map: Active Directory, AD CS, and SCCM vectors, tier-coded and converging on domain dominance" width="100%">
+</p>
 
----
+**[▶ Open the interactive map](assets/attack-map.html)** — fold any vector open for *why it's
+vulnerable → action & tools → goal*, plus its target host and plant script. (Open it in a browser or
+via GitHub Pages; GitHub does not render HTML inline.)
 
-## Lab Components & Attack Paths
+<details>
+<summary>Text version (Mermaid mindmap)</summary>
 
-### 1. DVAD-DC — Forest Root Domain Controller
-
-Provisions the `dvad.lab` AD forest, creates the root domain, and populates Active Directory with OUs, tiered security groups, 50+ user accounts, and service accounts. Serves as the primary DNS server.
-
-- **Domain:** `dvad.lab` (NetBIOS: `DVAD`)
-- **Resources:** 2 vCPUs, 2 GB RAM
-
-#### Attack Paths
-
-| Attack | Detail |
-|---|---|
-| **Kerberoasting** | `svc_sqldb` — Domain Admin with MSSQLSvc SPN and weak password (`Passw0rd`) |
-| **AS-REP Roasting** | `j.martinez` — pre-authentication disabled |
-| **DCSync** | `gmsa_svc$` — GMSA with DS-Replication-Get-Changes rights |
-| **Golden Ticket** | TGT forgery using extracted KRBTGT hash |
-| **ACL Chain 1** | `j.martinez` GenericWrite → `r.chen` WriteOwner → `Server-Admins` WriteDACL → Domain Admins |
-| **ACL Chain 2** | `a.johnson` GenericAll → `Helpdesk-Operators` GenericWrite → `svc_backup` (Backup Operators / NTDS dump) |
-| **ACL Chain 3** | `m.wilson` ForceChangePassword → `k.lee` Self-Membership → `Project-Phoenix` WriteDACL → Enterprise Admins |
-| **ACL Chain 4** | `d.patel` WriteOwner → `GMSA-Readers` → `gmsa_svc$` DCSync rights |
-| **AdminSDHolder** | GenericAll on AdminSDHolder for persistence |
-| **Anonymous LDAP** | `dSHeuristics` set — unauthenticated LDAP enumeration |
-
----
-
-### 2. CA01 — Active Directory Certificate Services
-
-Enterprise Root CA joined to `dvad.lab`. Deployed with vulnerable certificate templates and CA-level misconfigurations covering ESC1-ESC8.
-
-- **CA Type:** Enterprise Root CA
-- **Resources:** 2 vCPUs, 2 GB RAM
-
-#### Attack Paths
-
-| Attack | Detail |
-|---|---|
-| **ESC1** | Low-privileged enrollment for auth certs with arbitrary Subject Alternative Names |
-| **ESC2** | Any Purpose EKU or unrestricted EKU on enrollable templates |
-| **ESC3** | Certificate Request Agent template abuse (enrollment on behalf of others) |
-| **ESC4** | Weak ACLs on certificate templates — `Domain Users` can modify |
-| **ESC5** | `l.garcia` has GenericAll on the CA AD object — PKI takeover |
-| **ESC6** | `EDITF_ATTRIBUTESUBJECTALTNAME2` enabled on CA — arbitrary SAN on any cert |
-| **ESC7** | `a.johnson` has ManageCA right — can enable ESC6 or self-issue certs |
-| **ESC8** | Web Enrollment on HTTP with NTLM (no EPA, no SSL) — relay-vulnerable |
-| **Certifried** | CVE-2022-26923 — machine account cert spoofing for domain privilege escalation |
-
----
-
-### 3. SRV01 — Domain-Joined Member Server
-
-Generic Windows Server 2019 domain member used for lateral movement, Kerberos delegation, and LAPS exploitation exercises.
-
-- **Resources:** 2 vCPUs, 2 GB RAM
-
-#### Attack Paths
-
-| Attack | Detail |
-|---|---|
-| **Unconstrained Delegation** | `TrustedForDelegation = $true` — TGTs cached in memory; capture via printer bug / coercion |
-| **Constrained Delegation** | `svc_web` delegates to `CIFS/DVAD-DC` with protocol transition (S4U2Self) |
-| **RBCD** | `l.garcia` GenericWrite on `CA01$` — can set `msDS-AllowedToActOnBehalfOfOtherIdentity` |
-| **LAPS** | `t.brown` has AllExtendedRights on `SRV01$` — reads `ms-Mcs-AdmPwd` (local admin password) |
-
----
-
-### 4. CM01 — Microsoft Endpoint Configuration Manager
-
-The primary SCCM attack target. MECM is deployed with unattended SQL provisioning and pre-injected misconfigurations that replicate the most commonly abused SCCM attack surface.
-
-- **Resources:** 2 vCPUs, 8 GB RAM
-- **SQL Server:** Auto-provisioned during deployment
-
-#### Attack Paths
-
-| Attack | Detail |
-|---|---|
-| **CRED-1 — PXE Boot / NAA** | PXE enabled without password — boot unknown machine, retrieve `DVAD\sccm_naa` creds from policy |
-| **CRED-2 — Task Sequence Variables** | Task sequence deployed to All Systems with exposed variables and embedded credentials |
-| **CRED-3 — Client Push** | `DVAD\sccm_cpia` — trigger NTLM coercion during client push to capture hash |
-| **CRED-4 — Anonymous DP Looting** | Distribution point with anonymous access or sensitive package content |
-
----
-
-## Quick Start
-
-### Prerequisites
-
-| Requirement | Notes |
-| --- | --- |
-| [Vagrant](https://www.vagrantup.com/downloads) >= 2.3.x | `winget install --id HashiCorp.Vagrant` |
-| [VirtualBox](https://www.virtualbox.org/wiki/Downloads) >= 7.x | Primary hypervisor |
-| RAM | 16 GB minimum — 32 GB recommended |
-| Disk | 120 GB free SSD space recommended |
-
-### Vagrant Plugins
-
-```powershell
-vagrant plugin install vagrant-winrm
-vagrant plugin install vagrant-windows-sysprep
+```mermaid
+mindmap
+  root((DVAD lab))
+    Active Directory
+      Chain 1 Kerberoasting - Domain Admin
+      Chain 2 AS-REP + Shadow Creds - Account Operators
+      Chain 3 GPP cpassword - NTDS.dit
+      Chain 4 GPO abuse - SYSTEM on DC
+      Chain 5 WriteOwner gMSA - DCSync
+      Chain 6 Kerberos delegation - Domain Admin
+      Chain 7 LAPS - Local admin SRV01
+      Chain 8 Anonymous bind - Foothold
+    AD CS
+      ESC1-4 template abuse - Domain Admin
+      ESC5 CA object GenericAll - PKI takeover
+      ESC6 EDITF SAN - Domain Admin
+      ESC7 ManageCA - PKI takeover
+      ESC8 HTTP relay - Domain Admin
+    Configuration Manager
+      CRED-1 PXE NAA - sccm_naa
+      CRED-2 Task sequence - sccm_dja
+      CRED-3 Client push - sccm_cpia
+      CRED-4 Anonymous DP - package secrets
 ```
 
-### Deploy
+</details>
 
-```powershell
-git clone https://github.com/Omaar1/DVAD.git
-cd DVAD
-vagrant up
-```
-
-Or use the ordered startup helper (recommended for first-time provisioning):
-
-```powershell
-.\start-lab.ps1
-```
-
-Provisioning takes **60-90+ minutes** depending on disk I/O and internet speed.
-
-> **Tip:** To avoid a large download during provisioning, manually place `MEM_Configmgr_Eval.exe` (~1.2 GB) in `provisioners/services/SCCM/MECM_Setup/` before running `vagrant up`.
-
-### Verify
-
-```powershell
-.\verify-lab.ps1
-```
-
-Checks IP reachability, WinRM connectivity, and key service status for all VMs.
-
-> **Warning:** This lab is intentionally vulnerable. Never expose it to untrusted networks.
+> **Edit the maps.** The poster regenerates from [`assets/build-attack-map.py`](assets/build-attack-map.py)
+> (`python build-attack-map.py attack-map.svg`, pure stdlib). The interactive map is data-driven —
+> edit the `DATA` array in [`assets/attack-map.html`](assets/attack-map.html).
 
 ---
 
-## User Accounts
+## Attack Surface
 
-### Service Accounts (Attack Targets)
+What is planted and where — the entry principal and the outcome for each path. These mirror the
+canonical checks in [`verify-lab-acl.ps1`](verify-lab-acl.ps1). No exploit commands here.
 
-| Account | Password | Attack Path |
+### Active Directory — DVAD-DC (Chains 1–8) · profile `core`
+
+| Chain | Technique | Entry principal | Outcome |
+|---|---|---|---|
+| **1** | Kerberoasting | `svc_sqldb` — Domain Admin with SPN `MSSQLSvc/SRV01.dvad.lab:1433` and weak password | **Domain Admin** |
+| **2** | AS-REP roast → Shadow Credentials | `j.martinez` (pre-auth disabled) → **GenericWrite** on `r.chen` | **Account Operators** |
+| **3** | GPP `cpassword` | any user reads SYSVOL `Services.xml` → `svc_backup` | **Backup Operators** → NTDS.dit |
+| **4** | GPO abuse | member of `Project-Phoenix` can edit the "DC Security Baseline" GPO (linked to the Domain Controllers OU) | **SYSTEM on the DC** |
+| **5** | WriteOwner → gMSA → DCSync | `d.patel` **WriteOwner** on `GMSA-Readers` → reads `gmsa_svc$` (holds replication rights) | **DCSync** |
+| **6** | Kerberos delegation | 6a `SRV01$` unconstrained · 6b `svc_web` constrained (`CIFS/DVAD-DC`, protocol transition) · 6c `l.garcia` **GenericWrite** on `CA01$` (RBCD) | **Domain Admin / impersonation** |
+| **7** | LAPS | `t.brown` **AllExtendedRights** on `SRV01$` → reads `ms-Mcs-AdmPwd` | **Local admin on SRV01** |
+| **8** | Anonymous LDAP bind | unauthenticated; `y.chen`'s password sits in her `description` field | **Foothold** (feeds Chain 4 — `y.chen` is in `Project-Phoenix`) |
+
+### AD Certificate Services — CA01 (ESC1–8) · profile `adcs`
+
+| ESC | Misconfiguration | Who can abuse it |
+|---|---|---|
+| **ESC1** | Enrollee-supplies-subject template with a client-auth EKU (arbitrary SAN) | Any domain user |
+| **ESC2** | Any-Purpose / unrestricted EKU on an enrollable template | Any domain user |
+| **ESC3** | Enrollment Agent template (request on behalf of others) | Any domain user |
+| **ESC4** | `Domain Users` hold **GenericAll** on a template | Any domain user |
+| **ESC5** | `l.garcia` has **GenericAll** on the CA AD object | `l.garcia` |
+| **ESC6** | `EDITF_ATTRIBUTESUBJECTALTNAME2` enabled on the CA (arbitrary SAN on any cert) | Any domain user |
+| **ESC7** | `a.johnson` holds the **ManageCA** right | `a.johnson` |
+| **ESC8** | Web enrollment over HTTP with NTLM (no EPA, no SSL) — relay-vulnerable | Network attacker |
+
+### Configuration Manager — CM01 (CRED-1…4) · profile `full`
+
+| Vector | Misconfiguration | Credential / loot exposed |
+|---|---|---|
+| **CRED-1 — PXE / NAA** | PXE boot enabled **without** a password | `DVAD\sccm_naa` (Network Access Account) |
+| **CRED-2 — Task Sequence Variables** | Task sequence deployed to All Systems with embedded secrets | `DVAD\sccm_dja` + custom OSD variables |
+| **CRED-3 — Client Push** | Client push installation account configured | `DVAD\sccm_cpia` (via NTLM coercion) |
+| **CRED-4 — Anonymous DP Looting** | Distribution point content readable anonymously | package secrets on the DP |
+
+---
+
+## Key Accounts
+
+Attack-relevant accounts and their starting credentials. The full 50+ user roster is defined in
+[`inventory/lab-users.json`](inventory/lab-users.json).
+
+| Account | Password | Role in the lab |
 | --- | --- | --- |
-| `DVAD\svc_sqldb` | `Passw0rd` | Kerberoasting (DA + MSSQLSvc SPN) |
-| `DVAD\svc_backup` | `Trustno1!` | NTDS dump via Backup Operators |
-| `DVAD\svc_web` | `Monkey123` | Constrained delegation to CIFS/DVAD-DC |
-| `DVAD\j.martinez` | `P@ssw0rd1` | AS-REP Roasting (pre-auth disabled) |
-| `DVAD\sccm_naa` | set by SCCM | PXE/NAA credential theft (CRED-1) |
-| `DVAD\sccm_cpia` | set by SCCM | Client push NTLM coercion (CRED-3) |
+| `DVAD\Administrator` | `P@ssw0rd` | Domain Admin on all VMs |
+| `DVAD\svc_sqldb` | `Passw0rd` | Kerberoastable Domain Admin — Chain 1 |
+| `DVAD\j.martinez` | `P@ssw0rd1` | AS-REP roastable; entry for Chain 2 |
+| `DVAD\r.chen` | `Password1` | Account Operators; Chain 2 target |
+| `DVAD\svc_backup` | `Trustno1!` | Backup Operators — Chain 3 |
+| `DVAD\d.patel` | `S0C#An@lyst2025!` | WriteOwner on `GMSA-Readers` — Chain 5 |
+| `DVAD\svc_web` | `Monkey123` | Constrained delegation to `CIFS/DVAD-DC` — Chain 6b |
+| `DVAD\l.garcia` | `G@rcia#SysOps2025` | GenericWrite on `CA01$` (RBCD, Chain 6c) + ESC5 |
+| `DVAD\t.brown` | `Br0wn#Helpdesk25` | AllExtendedRights on `SRV01$` (LAPS) — Chain 7 |
+| `DVAD\y.chen` | `S3n!0rDev#2025Yx` | Password leaked in `description` — Chain 8; in `Project-Phoenix` |
+| `DVAD\a.johnson` | `H3lpd3sk#2025!` | ManageCA — ESC7 |
+| `DVAD\sccm_naa` | set by SCCM | PXE/NAA credential theft — CRED-1 |
+| `DVAD\sccm_cpia` | set by SCCM | Client push NTLM coercion — CRED-3 |
+| `DVAD\sccm_dja` | set by SCCM | Exposed via task sequence — CRED-2 |
 
-### Admin Accounts
+> **Bonus Kerberoasting:** `svc_web`, `svc_exchange`, `svc_print`, and `svc_fileshare` all carry
+> SPNs and are roastable in addition to the Chain 1 target.
 
-| Account | Password | Role |
+---
+
+## Verifying the Build
+
+| Command | Runs on | Checks |
 | --- | --- | --- |
-| `DVAD\Administrator` | `P@ssw0rd` | Domain Admin |
+| `.\lab.ps1 verify` | host | Reachability, WinRM, expected services, domain membership — for the VMs in your profile |
+| [`verify-lab-acl.ps1`](verify-lab-acl.ps1) | the DC | **ground truth** — every Chain 1–8 plant by SID + rights + GUID, group membership, GPO links, SYSVOL cpassword, `dSHeuristics`, the `y.chen` leak |
 
-Additional privileged and attack-relevant accounts (e.g. `c.wright`, `m.thompson`,
-`b.anderson` in Domain Admins, and the `svc_*` service accounts) are defined in
-`lab-users.json`.
+> **`verify-lab-acl.ps1` is the correctness oracle.** If a doc and the DC disagree, the DC wins.
+
+---
+
+## Break it, then undo it
+
+The point of a practice lab is breaking it. Snapshot once after a clean build and a botched attack
+costs seconds instead of a rebuild:
+
+```powershell
+.\lab.ps1 snapshot            # after a good build
+.\lab.ps1 restore             # back to clean
+```
 
 ---
 
@@ -219,80 +218,46 @@ Additional privileged and attack-relevant accounts (e.g. `c.wright`, `m.thompson
 
 ```
 DVAD/
-├── Vagrantfile                                 # Lab orchestration and VM definitions
-├── start-lab.ps1                               # Ordered VM startup helper
-├── verify-lab.ps1                              # Post-deploy health check
-├── DVAD_Lab_Guide.md                           # Detailed lab notes and attack context
+├── lab.ps1                     # single entry point: plan/check/deps/up/verify/snapshot/restore
+├── Vagrantfile                 # VM definitions and provisioning phases
+├── verify-lab.ps1              # profile-aware health check
+├── verify-lab-acl.ps1          # DC-side ground-truth attack-path validation
+├── README.md / INSTALL.md      # this overview / full setup guide
+├── LICENSE
+├── assets/                     # attack-map poster, interactive map, generator
+├── cache/                      # host-side download cache (gitignored; see cache/README.md)
 ├── inventory/
-│   ├── lab-config.json                         # Single source of truth: domain, hosts/IPs, box, SCCM settings
-│   └── lab-users.json                          # OUs, groups, departmental users + service accounts
+│   ├── lab-config.json         # source of truth: domain, hosts, profiles, dependencies
+│   ├── lab-users.json          # OUs, groups, users, SPNs, the description leak
+│   └── lab-deps.json           # payload manifest (URLs, hashes, which profile needs what)
+├── tools/
+│   ├── lint-scripts.ps1        # naming / ASCII lint
+│   └── lab/                    # plan.psm1, prereq.psm1, deps.psm1, runner.psm1
 └── provisioners/
-    ├── get-lab-config.ps1                      # Loads lab-config.json (dot-source, then Get-LabConfig)
-    ├── invoke-vagrant-script.ps1               # PowerShell execution wrapper
-    ├── domain/
-    │   ├── deploy-forest.ps1                   # Forest and root domain setup
-    │   ├── add-to-domain.ps1                   # Domain join automation
-    │   ├── seed-directory.ps1                  # OU, user, and group creation
-    │   ├── install-laps-schema.ps1             # LAPS schema extension (official AdmPwd.PS module)
-    │   ├── configure-attack-paths.ps1          # ACL chains, Kerberoast, AS-REP, GMSA
-    │   └── configure-machine-attacks.ps1       # Delegation, RBCD, LAPS password (runs on SRV01)
-    ├── net/
-    │   └── configure-network.ps1               # All networking (Policy/MemberDns/RootDcDns/NatInternetDns)
-    ├── host/
-    │   └── prepare-host.ps1                    # Base OS configuration
-    ├── tools/
-    │   ├── enable-anonymous-bind.ps1           # LDAP anonymous bind (dSHeuristics) - wired into the root DC
-    │   └── enable-null-session.ps1             # SMB null-session enumeration - wired into the root DC
+    ├── get-lab-config.ps1      # config loader
+    ├── get-lab-payload.ps1     # cached-payload resolver
+    ├── domain/                 # forest, directory seed, Chains 1-8 plants
+    ├── net/ · host/ · tools/   # networking, base OS, anonymous bind / null session
     └── services/
-        ├── ADCS/
-        │   ├── install-adcs.ps1                # CA install + ESC1-4 template deployment
-        │   ├── configure-esc678.ps1            # CA-level ESC5-8 misconfigurations
-        │   ├── ESC[1-5]_VulnerableTemplate.json
-        │   └── ADCSTemplate/                   # Module for managing certificate templates
-        └── SCCM/
-            ├── install-mecm.ps1                # MECM primary site installation
-            ├── install-sql.ps1                 # SQL Server 2019
-            ├── install-adk.ps1                 # Windows ADK
-            ├── install-dep-roles.ps1           # IIS, BITS, .NET prerequisites
-            ├── prepare-sccm-accounts.ps1       # SCCM service account creation
-            ├── configure-vuln-pxe.ps1          # CRED-1: PXE without password
-            ├── configure-vuln-ts-variables.ps1 # CRED-2: Task sequence variable exposure
-            ├── configure-vuln-client-push.ps1  # CRED-3: Client push installation
-            └── configure-vuln-app-package.ps1  # CRED-4: Anonymous DP looting
+        ├── ADCS/               # CA install + ESC1-8
+        └── SCCM/               # SQL, ADK, MECM + CRED-1..4
 ```
 
-> **External tooling (git-ignored, fetched separately):** `provisioners/vulns/`
-> (BadBlood, ADModule, PingCastle, RpcView, MisconfigurationManager) and the SCCM install
-> media under `provisioners/services/SCCM/MECM_Setup/Media/` are intentionally **not tracked**.
-> A fresh clone will not contain them - stage them out-of-band before provisioning.
-
 ---
 
-## Project Phases
+## Roadmap
 
-| Phase | Scope | Status |
-| --- | --- | --- |
-| **Phase 1** | Core AD and ADCS automation | Completed |
-| **Phase 2** | MECM and SQL integration | Completed |
-| **Phase 3** | SCCM vulnerability injection (PXE / NAA / Client Push / DP) | Completed |
-| **Phase 4** | AD attack paths (ACL chains, Kerberoast, AS-REP, delegation, LAPS) | Completed |
-| **Phase 5** | ESC5-ESC8, SRV01 member server, 50+ realistic users | Completed |
-| **Phase 6** | Lab automation (start-lab.ps1, verify-lab.ps1) | Completed |
-| **Phase 7** | Standalone MSSQL (SQL01) + child domain (HQ-DC) / trust exploitation | Upcoming |
-| **Phase 8** | Workstation node + detection layer (Sysmon) | Upcoming |
+Built: AD forest and Chains 1–8, ADCS ESC1–8, MECM/SQL and CRED-1…4, profile-driven tooling.
 
----
-
-## Known Challenges
-
-**Resource consumption** — MECM and multiple Windows Servers are inherently heavy. Linked Clones and tuned VM resource allocations keep the footprint manageable, but 16 GB RAM and SSD storage are hard minimums for stable operation.
-
-**Provisioning time** — Full provisioning spans 60-90+ minutes. The SCCM VM alone takes 40+ minutes to install SQL Server, ADK, and MECM. The `boot_timeout = 900` setting prevents WinRM drops during long installations.
-
-**MECM installer** — The 1.2 GB `MEM_Configmgr_Eval.exe` is downloaded during provisioning if not pre-staged. Pre-staging it in `provisioners/services/SCCM/MECM_Setup/` saves significant time on slow connections.
+Next: standalone `SQL01`, child domain `HQ-DC` and trust abuse, a bundled attacker VM, guided
+per-chain exercises, and a detection layer (Sysmon).
 
 ---
 
 ## License
 
-This project is intended for **educational and research purposes only**. Use responsibly and only in isolated lab environments.
+[MIT](LICENSE).
+
+> **This lab is intentionally vulnerable.** It disables authentication hardening, leaks credentials,
+> and grants dangerous rights on purpose. Run it only on an isolated host-only/NAT network. Never
+> expose it to a production or untrusted network, and never reuse its patterns on a real domain.

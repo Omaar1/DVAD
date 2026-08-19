@@ -60,14 +60,10 @@ try {
     else {
         # .NET 3.5 is a Feature-on-Demand whose payload is not on the box, and this
         # box cannot fetch it from Windows Update (a WSUS policy redirects the FoD
-        # request, so DISM fails 0x800f0950). We install fully offline from the NetFx3
-        # SxS cabs the repo ships under ...\SCCM\sxs (committed; see .gitignore).
-        $LocalSource = "C:\vagrant\provisioners\services\SCCM\sxs"
-        $haveLocal = @(Get-ChildItem -Path $LocalSource -Filter '*.cab' -ErrorAction SilentlyContinue).Count -gt 0
-
-        if (-not $haveLocal) {
-            throw "No NetFx3 source cabs found in $LocalSource. The repo ships them under provisioners/services/SCCM/sxs/; if missing, restore with 'git checkout -- provisioners/services/SCCM/sxs'. This box cannot install .NET 3.5 from Windows Update."
-        }
+        # request, so DISM fails 0x800f0950). We install fully offline from the
+        # NetFx3 SxS cabs staged in the host-side cache (see cache/README.md).
+        . C:\vagrant\provisioners\get-lab-payload.ps1
+        $LocalSource = Get-LabPayload -Id netfx3 -Required
 
         Write-Host "Installing .NET 3.5 from offline source ($LocalSource)..." -ForegroundColor Cyan
         Enable-WindowsOptionalFeature -Online -FeatureName NetFx3 -All -Source $LocalSource -LimitAccess -NoRestart -ErrorAction Stop

@@ -1,51 +1,89 @@
-# Vagrant
-.vagrant/
-*.box
+# ============================================================================
+#  DVAD .gitignore
+#
+#  Rule of thumb: anything DOWNLOADED, EXTRACTED, or GENERATED at provision
+#  time never belongs in git.
+#
+#  Large payloads are cached HOST-SIDE on purpose. Guests write to
+#  C:\vagrant\... which is the Vagrant synced folder, i.e. this repo on the
+#  host. That way a failed provision or a `vagrant destroy` never forces a
+#  re-download. See cache/README.md.
+#
+#  History note: ~3 GB of installer payload was committed before these rules
+#  existed. Keep the extension catch-alls below broad, and force-include
+#  individual files with `!` only when a fresh clone genuinely needs them.
+# ============================================================================
 
-# Lab Artifacts & Junk (runtime output)
-junk/
-*.log
-*.evtx
+# ----------------------------------------------------------------------------
+# Host-side download cache (contents ignored, the README that explains it is not)
+# ----------------------------------------------------------------------------
+cache/*
+!cache/README.md
 
-# Vendored attacker tooling + Obsidian vault (not tracked; fetched/kept out-of-band).
-# These whole trees are ignored, so repo-wide *.txt/*.xml/*.html globs are unnecessary
-# and only risk silently hiding a needed file elsewhere.
-autolab/
-AutoLab/
-vulns/
+# Legacy cache paths still used by the current provisioners. Everything inside
+# is downloaded or extracted at run time; only the checked-in config survives.
+provisioners/services/SCCM/MECM_Setup/*
+!provisioners/services/SCCM/MECM_Setup/ConfigMgrAutoSave.ini
+provisioners/services/SCCM/SQL-offline/
+provisioners/services/SCCM/ADK/
+**/Media/
+**/Prereqs/
 
-# Large Binaries & ISOs
-*.code-workspace
+# ----------------------------------------------------------------------------
+# Installer payloads and binaries
+# Broad by design: a new .msi/.exe must be opted IN, never leak in by default.
+# (This is the gap that let LAPS.x64.msi and msodbcsql.msi get committed.)
+# ----------------------------------------------------------------------------
 *.iso
+*.vhd
 *.vhdx
 *.vdi
 *.vmdk
-MEM_Configmgr_Eval.exe
-**/Media/
-**/Prereqs/
-*.cab
-*.msu
+*.box
+*.wim
+*.swm
+*.msi
 *.msp
+*.msu
+*.cab
+*.exe
 *.dll
 
-# OS Metadata
+# No force-includes. Every Microsoft/Sysinternals redistributable is staged at
+# run time instead of being committed - see inventory/lab-deps.json, and run
+# `lab.ps1 deps` to fetch the set your profile needs. This keeps the clone
+# small and stops the repo redistributing binaries it has no licence to ship.
+provisioners/services/SCCM/sxs/
+provisioners/services/SCCM/extendSchema/
+provisioners/domain/LAPS/
+
+# ----------------------------------------------------------------------------
+# Vendored attacker tooling + personal notes (fetched / kept out-of-band).
+# Whole trees, so repo-wide globs are unnecessary and cannot hide a real file.
+# ----------------------------------------------------------------------------
+autolab/
+AutoLab/
+vulns/
+provisioners/vulns/
+
+# ----------------------------------------------------------------------------
+# Vagrant / runtime output
+# ----------------------------------------------------------------------------
+.vagrant/
+junk/
+*.log
+*.evtx
+setup.log
+
+# ----------------------------------------------------------------------------
+# Editor / OS / assistant metadata
+# ----------------------------------------------------------------------------
+.vscode/
+*.code-workspace
+*.user
 .DS_Store
 Thumbs.db
 Desktop.ini
-
-# User Specific
-.vscode/
-*.user
-
-# Claude AI assistant files
 .claude/
-
-# DeploymentConfigTemplate.xml is now tracked normally (no repo-wide *.xml ignore).
-!provisioners/services/SCCM/extendSchema/*.dll
-
-# .NET 3.5 is installed fully offline by install-dep-roles.ps1 from a pre-staged
-# NetFx3 source. Ignore anything else dropped into the sxs folder, but DO ship the
-# two NetFx3 cabs so a fresh clone can install .NET 3.5 without internet/Windows Update.
-provisioners/services/SCCM/sxs/*
-!provisioners/services/SCCM/sxs/microsoft-windows-netfx3-ondemand-package~31bf3856ad364e35~amd64~~.cab
-!provisioners/services/SCCM/sxs/Microsoft-Windows-NetFx3-OnDemand-Package~31bf3856ad364e35~amd64~en-US~.cab
+.agents/
+skills-lock.json

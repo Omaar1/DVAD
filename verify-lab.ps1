@@ -1,73 +1,103 @@
 # verify-lab.ps1
-# Post-provisioning health check for DVAD.
-# Tests IP reachability, WinRM connectivity, and key service status.
+# Post-provisioning health check for DVAD. Tests IP reachability, WinRM, expected
+# service state, and domain membership for the VMs in a deployment profile.
+#
+# Profile-aware on purpose: the previous version hardcoded all four VMs, so a
+# 'core' build (DC + member server) reported two false PING failures for CA01 and
+# CM01 - VMs it was never asked to create. The VM list and the expected services
+# both come from inventory/lab-config.json via the shared planner.
+#
+# Exit code 0 when every check passes, 1 otherwise.
+#
+#   .\verify-lab.ps1                    # the default profile
+#   .\verify-lab.ps1 -Profile full
+#   .\verify-lab.ps1 -Only CA01
 
-. "$PSScriptRoot\provisioners\get-lab-config.ps1"
-$cfg = Get-LabConfig
-
-$vms = @(
-    @{ Name = $cfg.hosts.rootdc.name; IP = $cfg.hosts.rootdc.ip; Services = @("ADWS", "DNS", "Netlogon", "NTDS") },
-    @{ Name = $cfg.hosts.adcs.name;   IP = $cfg.hosts.adcs.ip;   Services = @("CertSvc", "W3SVC") },
-    @{ Name = $cfg.hosts.sccm.name;   IP = $cfg.hosts.sccm.ip;   Services = @("SMS_Executive", "MSSQLSERVER", "W3SVC") },
-    @{ Name = $cfg.hosts.svr1.name;   IP = $cfg.hosts.svr1.ip;   Services = @("Workstation") }
+[CmdletBinding()]
+param(
+    [Alias('Profile')]
+    [string]   $LabProfile,
+    [string[]] $Only
 )
 
-$pass   = ConvertTo-SecureString $cfg.domain.administratorPassword -AsPlainText -Force
-$cred   = New-Object System.Management.Automation.PSCredential("$($cfg.domain.netbiosName)\Administrator", $pass)
+Import-Module (Join-Path $PSScriptRoot 'tools\lab\plan.psm1') -Force
 
-$allOk = $true
+$plan = New-LabPlan -ProfileName $LabProfile -Only $Only
+$cfg  = $plan.Config
 
+$pass = ConvertTo-SecureString $cfg.domain.administratorPassword -AsPlainText -Force
+$cred = New-Object System.Management.Automation.PSCredential(
+    "$($cfg.domain.netbiosName)\Administrator", $pass)
+
+$PASS = 0; $FAIL = 0
+
+function ok   { param($m) $script:PASS++; Write-Host "  [PASS] $m" -ForegroundColor Green }
+function no   { param($m) $script:FAIL++; Write-Host "  [FAIL] $m" -ForegroundColor Red }
+
+Write-Host ""
 Write-Host "======================================" -ForegroundColor Cyan
-Write-Host " DVAD Health Check" -ForegroundColor Cyan
+Write-Host " DVAD Health Check - profile '$($plan.ProfileName)'" -ForegroundColor Cyan
+Write-Host " $($plan.VmNames.Count) VM(s): $($plan.VmNames -join ', ')" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
 
-foreach ($vm in $vms) {
+foreach ($key in $plan.HostKeys) {
+    $h = $cfg.hosts.$key
+
     Write-Host ""
-    Write-Host "--- $($vm.Name) ($($vm.IP)) ---" -ForegroundColor Yellow
+    Write-Host "--- $($h.name) ($($h.ip)) ---" -ForegroundColor Yellow
 
-    # Ping
-    $ping = Test-Connection -ComputerName $vm.IP -Count 1 -Quiet -ErrorAction SilentlyContinue
-    if ($ping) {
-        Write-Host "  [PING] OK" -ForegroundColor Green
-    } else {
-        Write-Host "  [PING] FAIL - VM may be down" -ForegroundColor Red
-        $allOk = $false
+    if (-not (Test-Connection -ComputerName $h.ip -Count 1 -Quiet -ErrorAction SilentlyContinue)) {
+        no "$($h.name) unreachable at $($h.ip) - VM may be down"
         continue
     }
+    ok "$($h.name) responds to ping"
 
-    # WinRM
     try {
-        $session = New-PSSession -ComputerName $vm.IP -Credential $cred `
+        $session = New-PSSession -ComputerName $h.ip -Credential $cred `
             -SessionOption (New-PSSessionOption -SkipCACheck -SkipCNCheck) `
             -Authentication Basic -ErrorAction Stop
-        Write-Host "  [WINRM] Connected" -ForegroundColor Green
-
-        # Service checks
-        foreach ($svc in $vm.Services) {
-            $status = Invoke-Command -Session $session -ScriptBlock {
-                param($s)
-                $service = Get-Service -Name $s -ErrorAction SilentlyContinue
-                if ($service) { $service.Status } else { "NotFound" }
-            } -ArgumentList $svc
-            if ($status -eq "Running") {
-                Write-Host "  [SVC] $svc : Running" -ForegroundColor Green
-            } else {
-                Write-Host "  [SVC] $svc : $status" -ForegroundColor Red
-                $allOk = $false
-            }
-        }
-        Remove-PSSession $session
     } catch {
-        Write-Host "  [WINRM] FAIL - $_" -ForegroundColor Red
-        $allOk = $false
+        no "$($h.name) WinRM failed - $_"
+        continue
+    }
+    ok "$($h.name) WinRM connected"
+
+    try {
+        # Expected services come from lab-config.json, not a table in this file.
+        foreach ($svc in @($h.services)) {
+            $state = Invoke-Command -Session $session -ScriptBlock {
+                param($s)
+                $x = Get-Service -Name $s -ErrorAction SilentlyContinue
+                if ($x) { $x.Status.ToString() } else { 'NotFound' }
+            } -ArgumentList $svc
+
+            if ($state -eq 'Running') { ok "$($h.name) service $svc running" }
+            else                      { no "$($h.name) service $svc is $state" }
+        }
+
+        # Domain membership. Proves an actual join rather than just "a Windows box
+        # answered" - the old check looked at the Workstation service, which runs
+        # on every Windows machine and therefore proved nothing.
+        $joined = Invoke-Command -Session $session -ScriptBlock {
+            (Get-CimInstance Win32_ComputerSystem).Domain
+        }
+        if ($joined -eq $cfg.domain.fqdn) { ok "$($h.name) joined to $joined" }
+        else { no "$($h.name) domain is '$joined', expected '$($cfg.domain.fqdn)'" }
+    } finally {
+        Remove-PSSession $session -ErrorAction SilentlyContinue
     }
 }
 
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Cyan
-if ($allOk) {
-    Write-Host " All checks passed - lab is healthy" -ForegroundColor Green
+Write-Host (" PASS: {0}   FAIL: {1}" -f $PASS, $FAIL) -ForegroundColor $(if ($FAIL -eq 0) { 'Green' } else { 'Red' })
+if ($FAIL -eq 0) {
+    Write-Host " Lab is healthy" -ForegroundColor Green
+    Write-Host ""
+    Write-Host " Next: run verify-lab-acl.ps1 ON the DC to validate the attack paths." -ForegroundColor DarkGray
 } else {
-    Write-Host " Some checks failed - review output above" -ForegroundColor Red
+    Write-Host " Review the failures above" -ForegroundColor Red
 }
 Write-Host "======================================" -ForegroundColor Cyan
+
+if ($FAIL -gt 0) { exit 1 } else { exit 0 }

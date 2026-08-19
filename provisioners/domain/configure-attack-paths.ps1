@@ -2,14 +2,19 @@
 # Configures realistic AD attack paths for the DVAD red team environment.
 # Run on the root DC AFTER seed-directory.ps1 has created all users/groups.
 #
-# Attack Chains:
-#   1. Kerberoasting DA           (svc_sqldb)
-#   2. AS-REP Roast -> chain -> DA (j.martinez -> r.chen -> Server-Admins -> DA)
-#   3. GenericAll -> Kerberoast    (a.johnson -> Helpdesk-Operators -> svc_backup)
-#   4. ForceChangePassword chain  (m.wilson -> k.lee -> Project-Phoenix -> EA)
-#   5. WriteOwner -> GMSA -> DCSync(d.patel -> GMSA-Readers -> gmsa_svc$ -> DC)
-#   6. Delegation attacks         (Unconstrained/Constrained/RBCD - configured in configure-machine-attacks.ps1)
-#   7. AllExtendedRights -> LAPS   (t.brown -> SRV01$)
+# Attack Chains (each chain has ONE unique entry vector and ONE unique win):
+#   1. Kerberoast -> Domain Admin  (svc_sqldb: DA with an SPN and a weak password)
+#   2. AS-REP -> Shadow Creds      (j.martinez -> GenericWrite on r.chen -> Account Operators)
+#   3. GPP cpassword -> NTDS       (SYSVOL Services.xml -> svc_backup -> Backup Operators)
+#   4. GPO abuse -> SYSTEM on DC   (Project-Phoenix edits a DC-linked GPO; see configure-chain4-gpo.ps1)
+#   5. WriteOwner -> gMSA -> DCSync(d.patel -> GMSA-Readers -> gmsa_svc$ -> DC)
+#   6. Delegation                  (SRV01 unconstrained / svc_web constrained / l.garcia RBCD on CA01$;
+#                                   pre-staged by prestage-machine-attacks.ps1)
+#   7. AllExtendedRights -> LAPS   (t.brown -> SRV01$; pre-staged, see prestage-machine-attacks.ps1)
+#   8. Anonymous bind -> foothold  (y.chen's password in her description; see enable-anonymous-bind.ps1)
+#
+# Chains 3 and 4 are planted by their own scripts; this file only sets up the
+# group membership and ACEs that they depend on.
 
 Import-Module ActiveDirectory -ErrorAction Stop
 . C:\vagrant\provisioners\invoke-as-user-task.ps1
@@ -124,9 +129,10 @@ Write-Host "  Groups: Domain Admins, DB-Admins"
 Write-Host "  [OK] Kerberoastable Domain Admin ready" -ForegroundColor Green
 
 # ============================================================================
-# CHAIN 2: AS-REP Roast -> GenericWrite -> WriteOwner -> WriteDACL -> DA
-# j.martinez (AS-REP) -> GenericWrite on r.chen -> r.chen WriteOwner on Server-Admins
-# -> Server-Admins WriteDACL on Domain Admins
+# CHAIN 2: AS-REP Roast -> Shadow Credentials -> Account Operators
+# j.martinez (no pre-auth) is roasted offline, then uses GenericWrite on r.chen to
+# write msDS-KeyCredentialLink (Shadow Credentials) and authenticate as r.chen via
+# PKINIT. r.chen's power is her Account Operators membership.
 # ============================================================================
 Write-Host ""
 Write-Host "[Chain 2] AS-REP Roast -> Shadow Credentials -> Account Operators (j.martinez -> r.chen)" -ForegroundColor Green
@@ -155,9 +161,12 @@ Set-ADObjectACE -TargetDN $rchen.DistinguishedName -PrincipalSAM "j.martinez" -R
 Write-Host "  [OK] AS-REP -> GenericWrite (Shadow Creds) -> Account Operators chain ready" -ForegroundColor Green
 
 # ============================================================================
-# CHAIN 3: GenericAll on Group -> GenericWrite on Service Account -> NTDS dump
-# a.johnson -> GenericAll on Helpdesk-Operators -> Helpdesk-Operators GenericWrite on svc_backup
-# -> svc_backup is in Backup Operators (can dump NTDS)
+# CHAIN 3: GPP cpassword -> Backup Operators -> NTDS dump
+# Any domain user reads Services.xml from SYSVOL and decrypts the cpassword (the
+# AES key is public) to recover svc_backup, whose Backup Operators membership
+# grants SeBackupPrivilege on the DC -> offline NTDS.dit copy.
+# The SYSVOL side is planted by configure-chain3-gpp.ps1; only the group
+# membership is set here.
 # ============================================================================
 Write-Host ""
 Write-Host "[Chain 3] GPP cpassword -> Backup Operators (svc_backup -> offline NTDS via SeBackup)" -ForegroundColor Green
@@ -171,9 +180,10 @@ Write-Host "  [GROUP] svc_backup added to Backup Operators"
 Write-Host "  [OK] Backup Operators membership ready (creds disclosed via GPP - configure-chain3-gpp.ps1)" -ForegroundColor Green
 
 # ============================================================================
-# CHAIN 4: ForceChangePassword -> Self/AddMember -> WriteDACL -> Enterprise Admin
-# m.wilson -> ForceChangePassword on k.lee -> k.lee Self-Membership on Project-Phoenix
-# -> Project-Phoenix WriteDACL on Enterprise Admins
+# CHAIN 4: GPO abuse -> SYSTEM on the DC
+# Project-Phoenix holds edit rights on a GPO linked to the Domain Controllers OU,
+# so any member can inject an immediate scheduled task that runs as SYSTEM on the
+# DC. Entry is the Chain 8 anonymous foothold (y.chen is in Project-Phoenix).
 # ============================================================================
 Write-Host ""
 Write-Host "[Chain 4] GPO abuse -> SYSTEM on DC (Project-Phoenix edits a DC-linked GPO)" -ForegroundColor Green

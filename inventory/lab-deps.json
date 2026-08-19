@@ -1,0 +1,127 @@
+{
+  "_comment": [
+    "Payload manifest for the host-side cache (see cache/README.md).",
+    "",
+    "Each entry declares WHERE a payload comes from, so nothing large has to be",
+    "committed to git. 'source' is one of:",
+    "",
+    "  download - fetched from 'url' by tools/lab/deps.psm1",
+    "  media    - extracted from an already-cached payload (e.g. the MECM media)",
+    "  manual   - no stable public URL; the user stages it once (see 'howto')",
+    "",
+    "'sha256' is null until pinned. Run 'lab.ps1 deps -Pin' after a successful",
+    "fetch to record the observed hash; from then on every fetch is verified.",
+    "Hashes are deliberately NOT guessed - an unverifiable hash is worse than none.",
+    "",
+    "'profiles' lists which deployment tiers need the payload, so 'core' users",
+    "never download SCCM-only dependencies."
+  ],
+  "deps": [
+    {
+      "id": "psexec",
+      "description": "Sysinternals PsExec - runs provisioning steps under a real SYSTEM/admin token",
+      "source": "download",
+      "url": "https://download.sysinternals.com/files/PSTools.zip",
+      "archive": "zip",
+      "archiveMember": "PsExec64.exe",
+      "dest": "cache/tools/PsExec64.exe",
+      "legacyPath": "provisioners/host/PsExec64.exe",
+      "sha256": "EDFAE1A69522F87B12C6DAC3225D930E4848832E3C551EE1E7D31736BF4525EF",
+      "profiles": [
+        "core",
+        "adcs",
+        "full"
+      ],
+      "consumers": [
+        "provisioners/host/disable-license-service.ps1"
+      ]
+    },
+    {
+      "id": "laps",
+      "description": "Legacy LAPS (AdmPwd.PS) - extends the schema with ms-Mcs-AdmPwd for Chain 7",
+      "source": "manual",
+      "url": "https://www.microsoft.com/en-us/download/details.aspx?id=46899",
+      "dest": "cache/tools/LAPS.x64.msi",
+      "legacyPath": "provisioners/domain/LAPS/LAPS.x64.msi",
+      "sha256": "0001DD763CC74D37E3979E016FFCD0512D91494A0B3B7270C7A3BB4E1915F6D1",
+      "profiles": [
+        "core",
+        "adcs",
+        "full"
+      ],
+      "consumers": [
+        "provisioners/domain/install-laps-schema.ps1"
+      ],
+      "howto": "Microsoft retired the direct link for legacy LAPS. Download LAPS.x64.msi from the page above once and drop it at cache/tools/LAPS.x64.msi."
+    },
+    {
+      "id": "netfx3",
+      "description": ".NET 3.5 offline SxS source - lets install-dep-roles.ps1 skip Windows Update",
+      "source": "manual",
+      "dest": "cache/netfx3/",
+      "legacyPath": "provisioners/services/SCCM/sxs/",
+      "sha256": null,
+      "profiles": [
+        "full"
+      ],
+      "consumers": [
+        "provisioners/services/SCCM/install-dep-roles.ps1"
+      ],
+      "howto": "These cabs ship on the Windows Server 2019 ISO under sources\\sxs and have no standalone download. Copy microsoft-windows-netfx3-ondemand-package~*.cab from the ISO into cache/netfx3/. Only the 'full' profile needs this."
+    },
+    {
+      "id": "mecm",
+      "description": "MECM/ConfigMgr evaluation installer (~1.2 GB), self-extracts to the install media",
+      "source": "download",
+      "url": "https://go.microsoft.com/fwlink/p/?LinkID=2195628",
+      "dest": "provisioners/services/SCCM/MECM_Setup/MEM_Configmgr_Eval.exe",
+      "legacyPath": null,
+      "sha256": null,
+      "profiles": [
+        "full"
+      ],
+      "consumers": [
+        "provisioners/services/SCCM/install-mecm.ps1"
+      ],
+      "note": "Stays under MECM_Setup rather than cache/: install-mecm.ps1 anchors its whole media tree (Media/, Prereqs/, ConfigMgrAutoSave.ini) on that one path. The directory is fully gitignored, and it is still host-side via the C:\\vagrant synced folder, so the no-re-download property holds. Relocating it is a follow-up, not a prerequisite."
+    },
+    {
+      "id": "extadsch",
+      "description": "AD schema extension tool for SCCM - ships inside the MECM media",
+      "source": "media",
+      "mediaFrom": "provisioners/services/SCCM/MECM_Setup/Media",
+      "mediaMembers": [
+        "extadsch.exe",
+        "mfc140.dll",
+        "vcruntime140.dll",
+        "vcruntime140_1.dll"
+      ],
+      "dest": "provisioners/services/SCCM/extendSchema/",
+      "legacyPath": null,
+      "sha256": null,
+      "profiles": [
+        "full"
+      ],
+      "consumers": [
+        "provisioners/services/SCCM/prepare-sccm-accounts.ps1"
+      ],
+      "note": "Extracted from the MECM media once it is staged, so it never needs its own download."
+    },
+    {
+      "id": "msodbcsql",
+      "description": "Microsoft ODBC Driver for SQL Server - MECM prerequisite",
+      "source": "download",
+      "url": "https://go.microsoft.com/fwlink/?linkid=2220989",
+      "dest": "provisioners/services/SCCM/MECM_Setup/msodbcsql.msi",
+      "legacyPath": null,
+      "sha256": null,
+      "profiles": [
+        "full"
+      ],
+      "consumers": [
+        "provisioners/services/SCCM/install-mecm.ps1"
+      ],
+      "note": "Same URL install-mecm.ps1 already uses, staged up front so the SCCM build does not stall on it."
+    }
+  ]
+}

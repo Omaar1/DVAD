@@ -137,13 +137,15 @@ $remoteScriptBlock = {
     }
     
     # [TASK C] EXTEND SCHEMA (No Copying Needed)
-    # Use the existing path on the DC
-    $ExistingExe = "C:\vagrant\provisioners\services\SCCM\extendSchema\extadsch.exe"
+    # Resolve from the host-side cache, falling back to the in-repo copy.
+    . C:\vagrant\provisioners\get-lab-payload.ps1
+    $schemaDir   = Get-LabPayload -Id extadsch
+    $ExistingExe = if ($schemaDir) { Join-Path $schemaDir 'extadsch.exe' } else { $null }
     $LogFile = "C:\ExtADSch.log"
-    
+
     Write-Host "--- Extending Schema (On DC) ---"
-    
-    if (Test-Path $ExistingExe) {
+
+    if ($ExistingExe -and (Test-Path $ExistingExe)) {
         # Check idempotency
         $SchemaPath = (Get-ADRootDSE).SchemaNamingContext
         if (Get-ADObject -Filter "name -eq 'MS-SMS-Management-Point'" -SearchBase $SchemaPath -ErrorAction SilentlyContinue) {

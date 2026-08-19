@@ -26,13 +26,88 @@
     "prefix": "10.10.10."
   },
   "hosts": {
-    "rootdc": { "name": "DVAD-DC", "ip": "10.10.10.100", "cpus": 2, "memory": 2048 },
-    "childdc": { "name": "HQ-DC", "ip": "10.10.10.101", "cpus": 2, "memory": 4096 },
-    "adcs": { "name": "CA01", "ip": "10.10.10.103", "cpus": 2, "memory": 2048 },
-    "sccm": { "name": "CM01", "ip": "10.10.10.104", "cpus": 2, "memory": 8192 },
-    "svr1": { "name": "SRV01", "ip": "10.10.10.150", "cpus": 2, "memory": 2048 },
-    "mssql": { "name": "SQL01", "ip": "10.10.10.105", "cpus": 2, "memory": 4096 }
+    "rootdc": {
+      "name": "DVAD-DC", "ip": "10.10.10.100", "cpus": 2, "memory": 2048,
+      "role": "Forest root DC / DNS",
+      "buildMinutes": 25,
+      "services": ["ADWS", "DNS", "Netlogon", "NTDS"],
+      "dependsOn": [],
+      "settleSeconds": 90,
+      "built": true
+    },
+    "childdc": {
+      "name": "HQ-DC", "ip": "10.10.10.101", "cpus": 2, "memory": 4096,
+      "role": "Child domain DC (hq.dvad.lab)",
+      "buildMinutes": 20,
+      "services": ["ADWS", "DNS", "Netlogon", "NTDS"],
+      "dependsOn": ["rootdc"],
+      "settleSeconds": 60,
+      "built": false
+    },
+    "adcs": {
+      "name": "CA01", "ip": "10.10.10.103", "cpus": 2, "memory": 2048,
+      "role": "Enterprise Root CA (ESC1-8)",
+      "buildMinutes": 15,
+      "services": ["CertSvc", "W3SVC", "Netlogon"],
+      "dependsOn": ["rootdc"],
+      "settleSeconds": 30,
+      "built": true
+    },
+    "sccm": {
+      "name": "CM01", "ip": "10.10.10.104", "cpus": 2, "memory": 8192,
+      "role": "MECM primary site + SQL 2019 (CRED-1..4)",
+      "buildMinutes": 50,
+      "services": ["SMS_Executive", "MSSQLSERVER", "W3SVC", "Netlogon"],
+      "dependsOn": ["rootdc"],
+      "settleSeconds": 60,
+      "built": true
+    },
+    "svr1": {
+      "name": "SRV01", "ip": "10.10.10.150", "cpus": 2, "memory": 2048,
+      "role": "Member server (delegation / LAPS / RBCD target)",
+      "buildMinutes": 12,
+      "services": ["Netlogon"],
+      "dependsOn": ["rootdc"],
+      "settleSeconds": 30,
+      "built": true
+    },
+    "mssql": {
+      "name": "SQL01", "ip": "10.10.10.105", "cpus": 2, "memory": 4096,
+      "role": "Standalone MSSQL member server",
+      "buildMinutes": 20,
+      "services": ["MSSQLSERVER", "Netlogon"],
+      "dependsOn": ["rootdc"],
+      "settleSeconds": 30,
+      "built": false
+    }
   },
+
+  "_comment_profiles": [
+    "Deployment tiers. 'hosts' lists keys from the hosts map above.",
+    "dependsOn drives the start-order graph: lab.ps1 topologically sorts the",
+    "selected hosts into waves, and every host inside one wave is independent.",
+    "SRV01 deliberately does NOT depend on CA01: prestage-machine-attacks.ps1",
+    "pre-creates BOTH SRV01$ and CA01$ on the DC with their Chain 6/7 ACEs, so",
+    "SRV01 never has to wait for the CA01 machine to exist."
+  ],
+  "profiles": {
+    "core": {
+      "description": "Active Directory fundamentals. Chains 1-8.",
+      "hosts": ["rootdc", "svr1"],
+      "diskGB": 60
+    },
+    "adcs": {
+      "description": "Core plus an Enterprise Root CA. Chains 1-8 and ESC1-8.",
+      "hosts": ["rootdc", "svr1", "adcs"],
+      "diskGB": 90
+    },
+    "full": {
+      "description": "Everything, including MECM/SQL. Chains 1-8, ESC1-8, CRED-1..4.",
+      "hosts": ["rootdc", "svr1", "adcs", "sccm"],
+      "diskGB": 120
+    }
+  },
+  "defaultProfile": "core",
   "sccm": {
     "siteCode": "PS1",
     "siteName": "LabPrimary",

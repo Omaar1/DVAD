@@ -1,11 +1,12 @@
 Import-Module C:\vagrant\provisioners\phase-timer.psm1 -Force
 Start-PhaseTimer -PhaseName "DISABLE LICENSE SERVICE"
 
-# Define the path to PsExec executable
-$psexecPath = "C:\vagrant\provisioners\host\psexec64.exe"
+# Resolve PsExec from the host-side cache, falling back to the in-repo copy.
+. C:\vagrant\provisioners\get-lab-payload.ps1
+$psexecPath = Get-LabPayload -Id psexec
 
 # Check if PsExec exists
-if (Test-Path $psexecPath) {
+if ($psexecPath -and (Test-Path $psexecPath)) {
     Write-Host "PsExec found. Proceeding with execution..." -ForegroundColor Green
 
     # Run PsExec with the required parameters to disable the service

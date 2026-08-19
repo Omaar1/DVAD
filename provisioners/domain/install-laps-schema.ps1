@@ -18,13 +18,16 @@
 $ErrorActionPreference = "Stop"
 
 . C:\vagrant\provisioners\get-lab-config.ps1
+. C:\vagrant\provisioners\get-lab-payload.ps1
 . C:\vagrant\provisioners\invoke-as-user-task.ps1
 Import-Module C:\vagrant\provisioners\phase-timer.psm1 -Force
 
 $cfg     = Get-LabConfig
 $netbios = $cfg.domain.netbiosName
 $adminPw = $cfg.domain.administratorPassword
-$lapsMsi = "C:\vagrant\provisioners\domain\LAPS\LAPS.x64.msi"
+# Cache first, then the in-repo copy. Only resolved when the schema actually
+# needs extending, so a lab whose schema is already extended never needs it.
+$lapsMsi = Get-LabPayload -Id laps
 
 Start-PhaseTimer -PhaseName "LAPS SCHEMA EXTENSION (AdmPwd.PS)"
 
