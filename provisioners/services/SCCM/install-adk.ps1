@@ -50,8 +50,13 @@ $DownloadDir = "C:\ADK-Setup"
 $LogPathADK = "C:\ADKinstallerLog.txt"
 $LogPathWinPE = "C:\winPEADKinstallerLog.txt"
 
-# Features to install (Standard SCCM requirements)
-$ADKFeatures = 'OptionId.DeploymentTools', 'OptionId.ImagingAndConfigurationDesigner', 'OptionId.ICDConfigurationDesigner', 'OptionId.UserStateMigrationTool'
+# Features to install - what ConfigMgr actually uses (Deployment Tools, USMT).
+# Deliberately excludes Imaging and Configuration Designer (ICD): it's for OEM
+# provisioning packages, not ConfigMgr OSD, and its dependency chain drags in
+# a WIM Mount kernel driver package (package_Imaging_drivers_installer_amd64)
+# that fails to install with 0x80070005 (ACCESS_DENIED) over a WinRM/PsExec
+# session even as SYSTEM - so skip pulling it in rather than fight that.
+$ADKFeatures = 'OptionId.DeploymentTools', 'OptionId.UserStateMigrationTool'
 $WinPEFeature = 'OptionId.WindowsPreinstallationEnvironment'
 
 # Current, Microsoft-maintained ADK download links (version-stable fwlinks), pinned to

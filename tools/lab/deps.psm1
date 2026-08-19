@@ -211,13 +211,27 @@ function Install-LabDep {
                 return (Test-LabDep -Dep $Dep)
             }
             if (-not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest -Force | Out-Null }
-            foreach ($m in $Dep.mediaMembers) {
-                $hit = Get-ChildItem -Path $from -Filter $m -Recurse -File -ErrorAction SilentlyContinue |
-                       Select-Object -First 1
-                if ($hit) {
-                    Copy-Item $hit.FullName -Destination (Join-Path $dest $m) -Force
-                } else {
-                    Write-Host "      [warn] '$m' not found under $($Dep.mediaFrom)" -ForegroundColor Yellow
+
+            # Anchor every member to the SAME directory as the first one. Media
+            # trees like MECM's SMSSETUP\BIN often ship both x86 (I386) and x64
+            # copies of the same DLL name; an independent recursive search per
+            # file can silently pair an x64 exe with an x86 DLL (0xC000007B at
+            # run time). The members of one dep are assumed to ship co-located.
+            $anchorName = $Dep.mediaMembers[0]
+            $anchorHit  = Get-ChildItem -Path $from -Filter $anchorName -Recurse -File -ErrorAction SilentlyContinue |
+                          Select-Object -First 1
+            if (-not $anchorHit) {
+                Write-Host "      [warn] '$anchorName' not found under $($Dep.mediaFrom)" -ForegroundColor Yellow
+            } else {
+                $anchorDir = $anchorHit.Directory.FullName
+                foreach ($m in $Dep.mediaMembers) {
+                    $hit = Get-ChildItem -Path $anchorDir -Filter $m -File -ErrorAction SilentlyContinue |
+                           Select-Object -First 1
+                    if ($hit) {
+                        Copy-Item $hit.FullName -Destination (Join-Path $dest $m) -Force
+                    } else {
+                        Write-Host "      [warn] '$m' not found alongside '$anchorName' in $anchorDir" -ForegroundColor Yellow
+                    }
                 }
             }
         }
