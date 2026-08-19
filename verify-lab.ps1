@@ -93,8 +93,6 @@ Write-Host "======================================" -ForegroundColor Cyan
 Write-Host (" PASS: {0}   FAIL: {1}" -f $PASS, $FAIL) -ForegroundColor $(if ($FAIL -eq 0) { 'Green' } else { 'Red' })
 if ($FAIL -eq 0) {
     Write-Host " Lab is healthy" -ForegroundColor Green
-    Write-Host ""
-    Write-Host " Next: run verify-lab-acl.ps1 ON the DC to validate the attack paths." -ForegroundColor DarkGray
 } else {
     Write-Host " Review the failures above" -ForegroundColor Red
 }
