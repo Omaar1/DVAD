@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="330" viewBox="0 0 1000 330"
+     font-family="'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+     role="img" aria-label="DVAD lab architecture: the dvad.lab forest on 10.10.10.0/24">
+<title>DVAD lab architecture</title>
+<rect x="0" y="0" width="1000" height="330" fill="#E4E4DC"/>
+<rect x="0.5" y="0.5" width="999" height="329" fill="none" stroke="#191B1A" stroke-width="1"/>
+<g transform="translate(0,-92)">
+<text x="40.5" y="110" font-size="9" letter-spacing="2" fill="#191B1A">NETWORK 10.10.10.0/24 · VIRTUALBOX 7.x HOST ONLY ADAPTER</text>
+<line x1="803" y1="106.5" x2="833" y2="106.5" stroke="#191B1A" stroke-width="1"></line>
+<text x="839" y="110" font-size="8.5" letter-spacing="1.6" fill="#4E514D">BUILT</text>
+<line x1="878" y1="106.5" x2="908" y2="106.5" stroke="#7B7E77" stroke-width="1" stroke-dasharray="5 4"></line>
+<text x="914" y="110" font-size="8.5" letter-spacing="1.6" fill="#7B7E77">PLANNED</text>
+<rect x="40.5" y="118.5" width="919" height="288" fill="none" stroke="#B0B2A8" stroke-width="1"></rect>
+<rect x="416" y="140.5" width="169" height="87" fill="none" stroke="#191B1A" stroke-width="1"></rect>
+<text x="429" y="168" font-size="17" font-weight="500" letter-spacing="2" fill="#191B1A">DVAD-DC</text>
+<text x="429" y="189" font-size="11.5" letter-spacing="1.2" fill="#191B1A">10.10.10.100</text>
+<text x="429" y="207" font-size="8.5" letter-spacing="1.1" fill="#4E514D">FOREST ROOT DC · DNS</text>
+<text x="429" y="222" font-size="8.5" letter-spacing="1.1" fill="#4E514D">2 vCPU · 2 GB</text>
+<g display="inline">
+<line x1="585" y1="184.5" x2="650" y2="184.5" stroke="#7B7E77" stroke-width="1" stroke-dasharray="5 4"></line>
+<text x="617.5" y="178" font-size="8" letter-spacing="1.4" fill="#7B7E77" text-anchor="middle">TRUST</text>
+<rect x="650.5" y="140.5" width="179" height="87" fill="none" stroke="#7B7E77" stroke-width="1" stroke-dasharray="5 4"></rect>
+<text x="663" y="168" font-size="17" font-weight="500" letter-spacing="2" fill="#7B7E77">HQ-DC</text>
+<text x="663" y="189" font-size="11.5" letter-spacing="1.2" fill="#7B7E77">10.10.10.101</text>
+<text x="663" y="207" font-size="8.5" letter-spacing="1.1" fill="#7B7E77">CHILD DOMAIN hq.dvad.lab</text>
+<text x="663" y="222" font-size="8.5" letter-spacing="1.1" fill="#7B7E77">PLANNED · PHASE 7</text>
+</g>
+<line x1="500.5" y1="227.5" x2="500.5" y2="250.5" stroke="#191B1A" stroke-width="1"></line>
+<circle cx="500.5" cy="250.5" r="3" fill="#191B1A"></circle>
+<line x1="146.5" y1="250.5" x2="618.5" y2="250.5" stroke="#191B1A" stroke-width="1"></line>
+<line x1="618.5" y1="250.5" x2="854.5" y2="250.5" stroke="#7B7E77" stroke-width="1" stroke-dasharray="5 4"></line>
+<line x1="146.5" y1="250.5" x2="146.5" y2="302" stroke="#191B1A" stroke-width="1"></line>
+<polygon points="143,302 150,302 146.5,310.5" fill="#191B1A"></polygon>
+<rect x="71.5" y="310.5" width="150" height="87" fill="none" stroke="#191B1A" stroke-width="1"></rect>
+<text x="84.5" y="338" font-size="17" font-weight="500" letter-spacing="2" fill="#191B1A">CA01</text>
+<text x="84.5" y="359" font-size="11.5" letter-spacing="1.2" fill="#191B1A">10.10.10.103</text>
+<text x="84.5" y="377" font-size="8.5" letter-spacing="1.1" fill="#4E514D">ENTERPRISE ROOT CA</text>
+<text x="84.5" y="392" font-size="8.5" letter-spacing="1.1" fill="#4E514D">2 vCPU · 2 GB</text>
+<line x1="382.5" y1="250.5" x2="382.5" y2="302" stroke="#191B1A" stroke-width="1"></line>
+<polygon points="379,302 386,302 382.5,310.5" fill="#191B1A"></polygon>
+<rect x="307.5" y="310.5" width="150" height="87" fill="none" stroke="#191B1A" stroke-width="1"></rect>
+<text x="320.5" y="338" font-size="17" font-weight="500" letter-spacing="2" fill="#191B1A">CM01</text>
+<text x="320.5" y="359" font-size="11.5" letter-spacing="1.2" fill="#191B1A">10.10.10.104</text>
+<text x="320.5" y="377" font-size="8.5" letter-spacing="1.1" fill="#4E514D">MECM SITE · SQL 2019</text>
+<text x="320.5" y="392" font-size="8.5" letter-spacing="1.1" fill="#4E514D">2 vCPU · 8 GB</text>
+<line x1="618.5" y1="250.5" x2="618.5" y2="302" stroke="#191B1A" stroke-width="1"></line>
+<polygon points="615,302 622,302 618.5,310.5" fill="#191B1A"></polygon>
+<rect x="543.5" y="310.5" width="150" height="87" fill="none" stroke="#191B1A" stroke-width="1"></rect>
+<text x="556.5" y="338" font-size="17" font-weight="500" letter-spacing="2" fill="#191B1A">SRV01</text>
+<text x="556.5" y="359" font-size="11.5" letter-spacing="1.2" fill="#191B1A">10.10.10.150</text>
+<text x="556.5" y="377" font-size="8.5" letter-spacing="1.1" fill="#4E514D">DOMAIN MEMBER SERVER</text>
+<text x="556.5" y="392" font-size="8.5" letter-spacing="1.1" fill="#4E514D">2 vCPU · 2 GB</text>
+<line x1="854.5" y1="250.5" x2="854.5" y2="302" stroke="#7B7E77" stroke-width="1" stroke-dasharray="5 4"></line>
+<polygon points="851,302 858,302 854.5,310.5" fill="#7B7E77"></polygon>
+<rect x="779.5" y="310.5" width="150" height="87" fill="none" stroke="#7B7E77" stroke-width="1" stroke-dasharray="5 4"></rect>
+<text x="792.5" y="338" font-size="17" font-weight="500" letter-spacing="2" fill="#7B7E77">SQL01</text>
+<text x="792.5" y="359" font-size="11.5" letter-spacing="1.2" fill="#7B7E77">10.10.10.105</text>
+<text x="792.5" y="377" font-size="8.5" letter-spacing="1.1" fill="#7B7E77">STANDALONE MSSQL</text>
+<text x="792.5" y="392" font-size="8.5" letter-spacing="1.1" fill="#7B7E77">PLANNED · PHASE 7</text>
+<g display="inline">
+<text x="154.5" y="284" font-size="8.5" letter-spacing="1.1" fill="#4E514D">LDAP · RPC · SMB</text>
+<text x="390.5" y="284" font-size="8.5" letter-spacing="1.1" fill="#4E514D">SMB · HTTP · PXE</text>
+<text x="626.5" y="284" font-size="8.5" letter-spacing="1.1" fill="#4E514D">SMB · KERBEROS</text>
+<text x="862.5" y="284" font-size="8.5" letter-spacing="1.1" fill="#7B7E77">TDS 1433</text>
+</g>
+</g>
+</svg>
