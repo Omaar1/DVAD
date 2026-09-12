@@ -61,7 +61,11 @@ function Invoke-LabWave {
     param(
         [Parameter(Mandatory)] [string[]] $VmNames,
         [switch] $Parallel,
-        [string] $LogPath
+        [string] $LogPath,
+        # Seconds between concurrent launches. Vagrant's machine-index lock is
+        # global per user and non-blocking on Windows, so simultaneous starts
+        # collide. See the comment at the launch site.
+        [int]    $StaggerSeconds = 20
     )
 
     $results = @()
@@ -69,6 +73,7 @@ function Invoke-LabWave {
     if ($Parallel -and $VmNames.Count -gt 1) {
         Write-Host "    starting $($VmNames.Count) VMs in parallel: $($VmNames -join ', ')" -ForegroundColor Yellow
         Write-Host "    (parallel start is experimental; logs interleave)" -ForegroundColor DarkGray
+        Write-Host "    staggering launches by ${StaggerSeconds}s to avoid the machine-index lock" -ForegroundColor DarkGray
 
         $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
         $jobs = @()
@@ -81,18 +86,43 @@ function Invoke-LabWave {
                     ("{0}-{1}.log" -f [IO.Path]::GetFileNameWithoutExtension($LogPath), $vm)
             } else { $null }
 
+            # Offset each launch. Vagrant funnels every machine-index access through
+            # one per-user lock file (~/.vagrant.d/data/machine-index/index.lock), and
+            # on Windows a concurrent open fails outright with EACCES rather than
+            # waiting its turn. Firing a whole wave at once therefore kills every VM
+            # but one, during target resolution, before any work happens. The lock is
+            # only held for short critical sections, so offsetting the starts clears it.
+            $stagger = $StaggerSeconds * $jobs.Count
+
             $jobs += Start-Job -Name "lab-up-$vm" -ScriptBlock {
-                param($repoRoot, $name, $log)
+                param($repoRoot, $name, $log, $delay, $maxAttempts)
                 Set-Location $repoRoot
-                $sw = [System.Diagnostics.Stopwatch]::StartNew()
-                if ($log) { & vagrant up $name 2>&1 | Out-File -FilePath $log -Encoding UTF8 }
-                else      { & vagrant up $name 2>&1 | Out-Null }
-                $code = $LASTEXITCODE
+                if ($delay -gt 0) { Start-Sleep -Seconds $delay }
+
+                $sw   = [System.Diagnostics.Stopwatch]::StartNew()
+                $sink = if ($log) { $log } else { [IO.Path]::GetTempFileName() }
+
+                $attempt = 0
+                while ($true) {
+                    $attempt++
+                    & vagrant up $name 2>&1 | Out-File -FilePath $sink -Encoding UTF8 -Append
+                    $code = $LASTEXITCODE
+                    if ($code -eq 0 -or $attempt -ge $maxAttempts) { break }
+
+                    # A lost index-lock race is the one failure safe to retry blindly:
+                    # it aborts before Vagrant has touched any machine state. Anything
+                    # else is a real build failure and must surface as-is.
+                    $tail = (Get-Content $sink -Tail 40 -ErrorAction SilentlyContinue) -join "`n"
+                    if ($tail -notmatch 'index\.lock' -or $tail -notmatch 'EACCES') { break }
+                    Start-Sleep -Seconds (10 * $attempt)
+                }
+
+                if (-not $log) { Remove-Item $sink -Force -ErrorAction SilentlyContinue }
                 $sw.Stop()
                 # Sole object on the job's output stream, so the parent never has
                 # to sift vagrant's console noise out of the result.
                 [PSCustomObject]@{ Name = $name; ExitCode = $code; Seconds = $sw.Elapsed.TotalSeconds }
-            } -ArgumentList $root, $vm, $vmLog
+            } -ArgumentList $root, $vm, $vmLog, $stagger, 4
 
             if ($vmLog) { Write-Host "      $vm -> $vmLog" -ForegroundColor DarkGray }
         }
