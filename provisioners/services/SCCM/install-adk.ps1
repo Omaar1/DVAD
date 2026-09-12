@@ -9,6 +9,38 @@ $ErrorActionPreference = "Stop"
 # Import Phase Timer Module
 Import-Module C:\vagrant\provisioners\phase-timer.psm1 -Force
 
+# Burn bundles (adksetup.exe, adkwinpesetup.exe) will not apply under the token
+# Vagrant's WinRM shell provisioner hands us. The bundle starts, enumerates its
+# packages, then exits 0x80070005 (ACCESS_DENIED) having installed nothing. CM01
+# forces basic-auth plaintext WinRM (see the Vagrantfile), which makes this a hard
+# failure rather than an intermittent one. Run the bundles through a one-shot
+# scheduled task instead, which yields a real SYSTEM logon token - the same helper
+# the AD schema and SMS provider steps already use.
+. C:\vagrant\provisioners\invoke-as-user-task.ps1
+
+function Invoke-AdkBundle {
+    <#
+    .SYNOPSIS
+        Runs an ADK setup bundle under a real SYSTEM token. Returns $true on exit 0.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Path,
+        [Parameter(Mandatory)] [string] $Arguments,
+        [Parameter(Mandatory)] [string] $TaskName,
+        [int] $TimeoutSec = 1800
+    )
+
+    # Backticked so $p resolves inside the task, while $Path and $Arguments are
+    # baked in here. Both are quote-free, so single quotes are safe delimiters.
+    $inner = @"
+`$p = Start-Process -FilePath '$Path' -ArgumentList '$Arguments' -Wait -PassThru
+if (`$p.ExitCode -ne 0) { throw "setup exited `$(`$p.ExitCode)" }
+"@
+
+    return (Invoke-AsUserTask -Name $TaskName -ScriptContent $inner -User 'SYSTEM' -TimeoutSec $TimeoutSec)
+}
+
 # --- PART 1: NETWORK SETUP (GO ONLINE) ---
 Start-PhaseTimer -PhaseName "CONFIGURING NETWORK FOR INTERNET"
 
@@ -99,20 +131,9 @@ else {
     Write-Host " for more info check log file: $LogPathADK" 
     $ADKArgs = "/norestart /quiet /ceip off /log `"$LogPathADK`" /features $($ADKFeatures -join ' ')"
     
-    $StartTime = Get-Date
-    $proc = Start-Process -FilePath $ADKSetupPath -ArgumentList $ADKArgs -PassThru
-    
-    # Progress timer
-    while (-not $proc.HasExited) {
-        $Elapsed = New-TimeSpan -Start $StartTime -End (Get-Date)
-        Write-Host -NoNewline "`r   Installing ADK Core...   " -ForegroundColor Yellow
-        # Write-Host -NoNewline "$([int]$Elapsed.TotalMinutes)m $($Elapsed.Seconds)s" -ForegroundColor Cyan
-        # Write-Host -NoNewline "]" -ForegroundColor Yellow
-        Start-Sleep -Seconds 2
-    }
-    Write-Host ""
-    
-    if ($proc.ExitCode -eq 0) {
+    $ok = Invoke-AdkBundle -Path $ADKSetupPath -Arguments $ADKArgs -TaskName 'LabInstallAdkCore'
+
+    if ($ok) {
         Write-Host "ADK Core Installed Successfully." -ForegroundColor Green
         Stop-PhaseTimer -Status Success
     }
@@ -123,7 +144,7 @@ else {
         Write-Host "--- ADK LOG TAIL (last 20) ---" -ForegroundColor Red
         Get-Content $LogPathADK -Tail 20 -ErrorAction SilentlyContinue
         Write-Host "--- end log ---" -ForegroundColor Red
-        Write-Error "ADK Install Failed. Exit Code: $($proc.ExitCode)"
+        Write-Error "ADK Install Failed. See $LogPathADK."
         exit 1
     }
 }
@@ -139,20 +160,9 @@ else {
     Write-Host " for more info check log file: $LogPathWinPE"
     $WinPEArgs = "/norestart /quiet /ceip off /log `"$LogPathWinPE`" /features $WinPEFeature"
     
-    $StartTime = Get-Date
-    $procPE = Start-Process -FilePath $WinPESetupPath -ArgumentList $WinPEArgs -PassThru
-    
-    # Progress timer
-    while (-not $procPE.HasExited) {
-        $Elapsed = New-TimeSpan -Start $StartTime -End (Get-Date)
-        Write-Host -NoNewline "`r   Installing WinPE Add-on...   " -ForegroundColor Yellow
-        # Write-Host -NoNewline "$([int]$Elapsed.TotalMinutes)m $($Elapsed.Seconds)s" -ForegroundColor Cyan
-        # Write-Host -NoNewline "]" -ForegroundColor Yellow
-        Start-Sleep -Seconds 2
-    }
-    Write-Host ""
-    
-    if ($procPE.ExitCode -eq 0) {
+    $okPE = Invoke-AdkBundle -Path $WinPESetupPath -Arguments $WinPEArgs -TaskName 'LabInstallAdkWinPE' -TimeoutSec 2700
+
+    if ($okPE) {
         Write-Host "WinPE Add-on Installed Successfully." -ForegroundColor Green
         Stop-PhaseTimer -Status Success
     }
@@ -161,7 +171,7 @@ else {
         Write-Host "--- WinPE LOG TAIL (last 20) ---" -ForegroundColor Red
         Get-Content $LogPathWinPE -Tail 20 -ErrorAction SilentlyContinue
         Write-Host "--- end log ---" -ForegroundColor Red
-        Write-Error "WinPE Install Failed. Exit Code: $($procPE.ExitCode)"
+        Write-Error "WinPE Install Failed. See $LogPathWinPE."
         exit 1
     }
 }
