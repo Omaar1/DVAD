@@ -217,11 +217,12 @@ Vagrant.configure("2") do |cfg_vm|
       # Install Windows Server roles/features required by SCCM:
       # - IIS, BITS, RDC, .NET Framework 3.5, Remote Differential Compression
       # The reboot is REQUIRED, not tidiness. Enabling NetFx3 uses -NoRestart and
-      # Install-WindowsFeature adds the IIS stack, so this phase leaves CBS with a
-      # reboot pending. The ADK's WIM Mount filter driver
-      # (package_Imaging_drivers_installer_amd64) refuses to install in that state
-      # and exits 5, which Burn reports as 0x80070005 and then rolls the whole kit
-      # back. Plain MSIs tolerate a pending reboot; filter drivers do not.
+      # Install-WindowsFeature adds the IIS stack, so this phase finishes with a
+      # reboot pending (observed as PendingFileRenameOperations). The ADK's WIM
+      # Mount filter driver (package_Imaging_drivers_installer_amd64) then exits 5
+      # without writing its log, which Burn reports as 0x80070005 before rolling
+      # the whole kit back. Every plain MSI in the bundle installs fine first, so
+      # the driver package is the only step that cares.
       phase config, "provisioners/services/SCCM/install-dep-roles.ps1", reboot: true
 
       # Install Windows Assessment and Deployment Kit (ADK):
