@@ -79,15 +79,31 @@ Start-PhaseTimer -PhaseName "ADK CORE INSTALLATION"
 # Guest-local dir (NOT the synced repo folder): keeps binaries out of git and forces a
 # fresh download of the current bootstrapper instead of reusing a stale committed one.
 $DownloadDir = "C:\ADK-Setup"
-$LogPathADK = "C:\ADKinstallerLog.txt"
-$LogPathWinPE = "C:\winPEADKinstallerLog.txt"
+
+# ADK log paths must NOT sit in a drive root. WimMountAdkSetupAmd64.exe, the WIM
+# Mount filter driver package that Deployment Tools depends on, unconditionally
+# creates its log file's PARENT DIRECTORY before opening the log. adksetup.exe
+# derives every per-package log path from this /log argument, so "C:\foo.txt"
+# makes the parent "C:\", and creating a directory that is already the volume
+# root returns ACCESS_DENIED - regardless of privilege, Administrators have
+# FullControl there. The installer then exits 5 without writing anything, Burn
+# reports it as 0x80070005, and the entire ADK rolls back. Any real
+# subdirectory avoids it. Verified with Process Monitor:
+#   CreateFile C:\  Disposition: Create, Options: Directory -> ACCESS DENIED
+$LogDir = "C:\ADK-Logs"
+$LogPathADK = "$LogDir\adk-core.txt"
+$LogPathWinPE = "$LogDir\adk-winpe.txt"
+if (-not (Test-Path $LogDir)) { New-Item -Path $LogDir -ItemType Directory | Out-Null }
 
 # Features to install - what ConfigMgr actually uses (Deployment Tools, USMT).
-# Deliberately excludes Imaging and Configuration Designer (ICD): it's for OEM
-# provisioning packages, not ConfigMgr OSD, and its dependency chain drags in
-# a WIM Mount kernel driver package (package_Imaging_drivers_installer_amd64)
-# that fails to install with 0x80070005 (ACCESS_DENIED) over a WinRM/PsExec
-# session even as SYSTEM - so skip pulling it in rather than fight that.
+# Excludes Imaging and Configuration Designer (ICD): it targets OEM provisioning
+# packages, not ConfigMgr OSD, so there is no reason to carry it.
+# NB the comment here used to claim the ICD chain was what dragged in the WIM
+# Mount driver package, and that the package could not install over a WinRM or
+# PsExec session even as SYSTEM. Both claims were wrong. The bundle's own
+# acquisition log shows package_Imaging_drivers_installer_amd64 arriving as a
+# Deployment Tools dependency, so excluding ICD never avoided it, and its
+# 0x80070005 was the log-path bug described above, not a privilege problem.
 $ADKFeatures = 'OptionId.DeploymentTools', 'OptionId.UserStateMigrationTool'
 $WinPEFeature = 'OptionId.WindowsPreinstallationEnvironment'
 
